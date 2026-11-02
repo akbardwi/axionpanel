@@ -1,0 +1,31 @@
+# Go
+/bin/
+/dist/
+/vendor/
+*.exe
+*.test
+*.out
+
+# Node
+node_modules/
+web/dist/
+.vite/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Panel data (local development)
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+
+# Logs
+*.log
