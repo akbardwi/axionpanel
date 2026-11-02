@@ -455,6 +455,13 @@ Conventions:
 | `POST /auth/mfa/disable` | [sudo] |
 | `GET /auth/sessions`, `DELETE /auth/sessions/{id}` | |
 
+Implemented in this revision: `POST /auth/login`, `POST /auth/logout` and
+`GET /auth/me`, with argon2id password hashing, the failed-login lockout,
+idle/absolute session expiry, hashed session storage and CSRF enforcement on
+state-changing requests. The remaining Auth rows (MFA, reauth, password
+change, session listing) stay **DESIGN / NOT IMPLEMENTED**, as does the
+secret entrance path and the per-IP rate limit.
+
 ### System
 
 | Endpoint | Notes |
