@@ -1,0 +1,12 @@
+import { createApp } from 'vue'
+import '@fontsource/plus-jakarta-sans/400.css'
+import '@fontsource/plus-jakarta-sans/600.css'
+import '@fontsource/plus-jakarta-sans/700.css'
+import '@fontsource/jetbrains-mono/400.css'
+import '@fontsource/jetbrains-mono/600.css'
+import 'material-symbols/outlined.css'
+import './style.css'
+import './layout.css'
+import App from './App.vue'
+import router from './router.js'
+createApp(App).use(router).mount('#app')

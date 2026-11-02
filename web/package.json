@@ -1,0 +1,9 @@
+{
+  "name": "axionpanel-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"dev": "vite", "build": "vite build", "preview": "vite preview", "test": "node --test tests/*.test.mjs"},
+  "dependencies": {"vue": "^3.5.0", "vue-router": "^4.5.0", "@fontsource/plus-jakarta-sans": "^5.2.0", "@fontsource/jetbrains-mono": "^5.2.0", "material-symbols": "^0.40.0"},
+  "devDependencies": {"vite": "^7.0.0", "@vitejs/plugin-vue": "^6.0.0", "tailwindcss": "^3.4.17", "postcss": "^8.5.0", "autoprefixer": "^10.4.0", "@playwright/test": "^1.56.0"}
+}

@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* AxionPanel UI design tokens.
+ * Dark palette: Stitch "Obsidian DevOps" DESIGN.md (normative for dark screens).
+ * Light palette: derived from the Stitch light-mode reference screen
+ *   (slate canvas, white cards, cyan-600/emerald-600/amber-600/rose-600 accents).
+ * Colors are RGB triplets so Tailwind opacity modifiers work: rgb(var(--c-x) / <alpha-value>).
+ * NOTE: the Stitch DESIGN.md prose quotes different hexes than its own front
+ * matter; the front matter values are what the reference screens actually
+ * render, so they win here. See docs/design/README.md.
+ */
+:root {
+  --c-background: 248 250 252;
+  --c-error: 225 29 72;
+  --c-error-container: 244 63 94;
+  --c-inverse-on-surface: 241 245 249;
+  --c-inverse-primary: 103 232 249;
+  --c-inverse-surface: 30 41 59;
+  --c-on-background: 15 23 42;
+  --c-on-error: 255 255 255;
+  --c-on-error-container: 136 19 55;
+  --c-on-primary: 255 255 255;
+  --c-on-primary-container: 22 78 99;
+  --c-on-primary-fixed: 12 74 110;
+  --c-on-primary-fixed-variant: 7 89 133;
+  --c-on-secondary: 255 255 255;
+  --c-on-secondary-container: 6 78 59;
+  --c-on-secondary-fixed: 2 44 34;
+  --c-on-secondary-fixed-variant: 6 78 59;
+  --c-on-surface: 15 23 42;
+  --c-on-surface-variant: 71 85 105;
+  --c-on-tertiary: 255 255 255;
+  --c-on-tertiary-container: 120 53 15;
+  --c-on-tertiary-fixed: 69 26 3;
+  --c-on-tertiary-fixed-variant: 120 53 15;
+  --c-outline: 100 116 139;
+  --c-outline-variant: 226 232 240;
+  --c-primary: 8 145 178;
+  --c-primary-container: 6 182 212;
+  --c-primary-fixed: 224 242 254;
+  --c-primary-fixed-dim: 8 145 178;
+  --c-secondary: 5 150 105;
+  --c-secondary-container: 16 185 129;
+  --c-secondary-fixed: 209 250 229;
+  --c-secondary-fixed-dim: 5 150 105;
+  --c-surface: 248 250 252;
+  --c-surface-bright: 255 255 255;
+  --c-surface-container: 248 250 252;
+  --c-surface-container-high: 238 242 247;
+  --c-surface-container-highest: 226 232 240;
+  --c-surface-container-low: 255 255 255;
+  --c-surface-container-lowest: 255 255 255;
+  --c-surface-dim: 238 242 247;
+  --c-surface-tint: 8 145 178;
+  --c-surface-variant: 238 242 247;
+  --c-tertiary: 217 119 6;
+  --c-tertiary-container: 245 158 11;
+  --c-tertiary-fixed: 254 243 199;
+  --c-tertiary-fixed-dim: 217 119 6;
+}
+
+.dark {
+  --c-background: 11 19 38;
+  --c-error: 255 180 171;
+  --c-error-container: 147 0 10;
+  --c-inverse-on-surface: 40 48 68;
+  --c-inverse-primary: 0 104 122;
+  --c-inverse-surface: 218 226 253;
+  --c-on-background: 218 226 253;
+  --c-on-error: 105 0 5;
+  --c-on-error-container: 255 218 214;
+  --c-on-primary: 0 54 64;
+  --c-on-primary-container: 0 66 79;
+  --c-on-primary-fixed: 0 31 38;
+  --c-on-primary-fixed-variant: 0 78 92;
+  --c-on-secondary: 0 56 36;
+  --c-on-secondary-container: 0 49 31;
+  --c-on-secondary-fixed: 0 33 19;
+  --c-on-secondary-fixed-variant: 0 82 54;
+  --c-on-surface: 218 226 253;
+  --c-on-surface-variant: 188 201 205;
+  --c-on-tertiary: 71 42 0;
+  --c-on-tertiary-container: 86 52 0;
+  --c-on-tertiary-fixed: 42 23 0;
+  --c-on-tertiary-fixed-variant: 101 62 0;
+  --c-outline: 134 147 151;
+  --c-outline-variant: 61 73 76;
+  --c-primary: 76 215 246;
+  --c-primary-container: 6 182 212;
+  --c-primary-fixed: 172 237 255;
+  --c-primary-fixed-dim: 76 215 246;
+  --c-secondary: 78 222 163;
+  --c-secondary-container: 0 165 114;
+  --c-secondary-fixed: 111 251 190;
+  --c-secondary-fixed-dim: 78 222 163;
+  --c-surface: 11 19 38;
+  --c-surface-bright: 49 57 77;
+  --c-surface-container: 23 31 51;
+  --c-surface-container-high: 34 42 61;
+  --c-surface-container-highest: 45 52 73;
+  --c-surface-container-low: 19 27 46;
+  --c-surface-container-lowest: 6 14 32;
+  --c-surface-dim: 11 19 38;
+  --c-surface-tint: 76 215 246;
+  --c-surface-variant: 45 52 73;
+  --c-tertiary: 255 185 95;
+  --c-tertiary-container: 231 148 0;
+  --c-tertiary-fixed: 255 221 184;
+  --c-tertiary-fixed-dim: 255 185 95;
+}
+
+html, body { margin: 0; padding: 0; }
+body { overscroll-behavior: none; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgb(var(--c-outline-variant)); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-outline)); }
+
+/* --- component layer: keeps screen markup short and consistent --- */
+.ax-card { background: rgb(var(--c-surface-container-low)); border: 1px solid rgb(var(--c-outline-variant) / 0.3); border-radius: 0.5rem; }
+.ax-card-pad { padding: 1rem; }
+.ax-hd { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
+.ax-label { font-family: "JetBrains Mono", monospace; font-size: 11px; line-height: 14px; letter-spacing: 0.06em; font-weight: 600; text-transform: uppercase; color: rgb(var(--c-outline)); }
+.ax-title { font-family: "Plus Jakarta Sans", sans-serif; font-size: 18px; line-height: 26px; letter-spacing: -0.01em; font-weight: 600; color: rgb(var(--c-on-surface)); }
+.ax-sub { font-family: "Plus Jakarta Sans", sans-serif; font-size: 12px; line-height: 18px; color: rgb(var(--c-on-surface-variant)); }
+.ax-mono { font-family: "JetBrains Mono", monospace; }
+.ax-pill { display: inline-flex; align-items: center; gap: 0.25rem; font-family: "JetBrains Mono", monospace; font-size: 11px; line-height: 16px; font-weight: 500; padding: 0.125rem 0.5rem; border-radius: 9999px; white-space: nowrap; }
+.ax-pill-ok { color: rgb(var(--c-secondary)); background: rgb(var(--c-secondary) / 0.1); }
+.ax-pill-warn { color: rgb(var(--c-tertiary)); background: rgb(var(--c-tertiary) / 0.12); }
+.ax-pill-err { color: rgb(var(--c-error)); background: rgb(var(--c-error) / 0.12); }
+.ax-pill-info { color: rgb(var(--c-primary)); background: rgb(var(--c-primary) / 0.12); }
+.ax-pill-dim { color: rgb(var(--c-on-surface-variant)); background: rgb(var(--c-surface-container-highest)); }
+.ax-dot { width: 0.375rem; height: 0.375rem; border-radius: 9999px; flex: none; }
+.ax-dot-ok { background: rgb(var(--c-secondary)); }
+.ax-dot-warn { background: rgb(var(--c-tertiary)); }
+.ax-dot-err { background: rgb(var(--c-error)); }
+.ax-dot-off { background: rgb(var(--c-outline)); }
+.ax-btn { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.875rem; border-radius: 0.5rem; font-family: "Plus Jakarta Sans", sans-serif; font-size: 12px; line-height: 18px; font-weight: 600; border: 1px solid transparent; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.ax-btn-primary { background: rgb(var(--c-primary)); color: rgb(var(--c-on-primary)); }
+.ax-btn-primary:hover { background: rgb(var(--c-primary-container)); }
+.ax-btn-ghost { background: rgb(var(--c-surface-container)); color: rgb(var(--c-on-surface)); border-color: rgb(var(--c-outline-variant) / 0.4); }
+.ax-btn-ghost:hover { background: rgb(var(--c-surface-container-high)); }
+.ax-btn-danger { background: rgb(var(--c-error) / 0.12); color: rgb(var(--c-error)); border-color: rgb(var(--c-error) / 0.35); }
+.ax-btn-danger:hover { background: rgb(var(--c-error) / 0.22); }
+.ax-input, .ax-select, .ax-textarea { width: 100%; box-sizing: border-box; background: rgb(var(--c-surface-container)); color: rgb(var(--c-on-surface)); border: 1px solid rgb(var(--c-outline-variant) / 0.5); border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-family: "JetBrains Mono", monospace; font-size: 12px; line-height: 18px; outline: none; }
+.ax-input:focus, .ax-select:focus, .ax-textarea:focus { border-color: rgb(var(--c-primary)); }
+.ax-input::placeholder, .ax-textarea::placeholder { color: rgb(var(--c-outline)); }
+.ax-field { margin-bottom: 0.875rem; }
+.ax-field > label { display: block; margin-bottom: 0.25rem; }
+.ax-table { width: 100%; border-collapse: collapse; }
+.ax-table th { text-align: left; font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.06em; font-weight: 600; text-transform: uppercase; color: rgb(var(--c-outline)); padding: 0.5rem 0.75rem; border-bottom: 1px solid rgb(var(--c-outline-variant) / 0.4); white-space: nowrap; }
+.ax-table td { padding: 0.625rem 0.75rem; border-bottom: 1px solid rgb(var(--c-outline-variant) / 0.2); font-size: 12px; line-height: 18px; color: rgb(var(--c-on-surface-variant)); vertical-align: middle; }
+.ax-table tr:last-child td { border-bottom: none; }
+.ax-table tr:hover td { background: rgb(var(--c-surface-container) / 0.6); }
+.ax-bar { width: 100%; height: 0.25rem; border-radius: 9999px; background: rgb(var(--c-surface-container-highest)); overflow: hidden; }
+.ax-bar > i { display: block; height: 100%; border-radius: 9999px; }
+.ax-kbd { font-family: "JetBrains Mono", monospace; font-size: 10px; padding: 0.125rem 0.375rem; border-radius: 0.25rem; background: rgb(var(--c-surface-container-highest)); color: rgb(var(--c-outline)); border: 1px solid rgb(var(--c-outline-variant) / 0.5); }
+.ax-code { font-family: "JetBrains Mono", monospace; font-size: 11px; line-height: 18px; background: rgb(var(--c-surface-container-lowest)); border: 1px solid rgb(var(--c-outline-variant) / 0.4); border-radius: 0.5rem; padding: 0.75rem; overflow-x: auto; white-space: pre; color: rgb(var(--c-on-surface-variant)); }
+.ax-divider { height: 1px; background: rgb(var(--c-outline-variant) / 0.3); margin: 0.875rem 0; }
+.ax-toggle { position: relative; width: 2.25rem; height: 1.25rem; border-radius: 9999px; background: rgb(var(--c-surface-container-highest)); border: 1px solid rgb(var(--c-outline-variant) / 0.5); cursor: pointer; flex: none; }
+.ax-toggle::after { content: ""; position: absolute; top: 0.125rem; left: 0.125rem; width: 0.875rem; height: 0.875rem; border-radius: 9999px; background: rgb(var(--c-outline)); transition: all 0.2s; }
+.ax-toggle.on { background: rgb(var(--c-secondary) / 0.3); border-color: rgb(var(--c-secondary)); }
+.ax-toggle.on::after { left: 1.125rem; background: rgb(var(--c-secondary)); }

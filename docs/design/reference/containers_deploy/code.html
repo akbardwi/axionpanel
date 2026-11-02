@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface-dim":"#0b1326","on-tertiary-fixed-variant":"#653e00","secondary-container":"#00a572","secondary-fixed":"#6ffbbe","surface-container":"#171f33","inverse-on-surface":"#283044","on-secondary":"#003824","tertiary-fixed-dim":"#ffb95f","surface-container-lowest":"#060e20","tertiary-fixed":"#ffddb8","secondary-fixed-dim":"#4edea3","on-background":"#dae2fd","error-container":"#93000a","on-tertiary-fixed":"#2a1700","primary-container":"#06b6d4","secondary":"#4edea3","on-error-container":"#ffdad6","inverse-primary":"#00687a","background":"#0b1326","on-primary-fixed":"#001f26","on-secondary-container":"#00311f","on-surface-variant":"#bcc9cd","on-error":"#690005","error":"#ffb4ab","tertiary":"#ffb95f","on-primary":"#003640","surface-bright":"#31394d","on-tertiary-container":"#563400","surface-container-highest":"#2d3449","on-primary-container":"#00424f","primary-fixed":"#acedff","on-secondary-fixed-variant":"#005236","surface-container-high":"#222a3d","surface-container-low":"#131b2e","primary":"#4cd7f6","surface-tint":"#4cd7f6","on-tertiary":"#472a00","tertiary-container":"#e79400","surface":"#0b1326","on-primary-fixed-variant":"#004e5c","outline":"#869397","on-surface":"#dae2fd","outline-variant":"#3d494c","surface-variant":"#2d3449","on-secondary-fixed":"#002113","primary-fixed-dim":"#4cd7f6","inverse-surface":"#dae2fd"},borderRadius:{DEFAULT:"0.125rem",lg:"0.25rem",xl:"0.5rem",full:"0.75rem"},spacing:{"space-xs":"0.25rem","space-xl":"1.5rem","space-md":"0.75rem","margin-lg":"2rem","margin":"1rem","gutter":"1rem","gutter-lg":"1.5rem","space-sm":"0.5rem","margin-md":"1.5rem","space-lg":"1rem"},fontFamily:{"body-lg":["Plus Jakarta Sans"],"code-lg":["JetBrains Mono"],"code-sm":["JetBrains Mono"],"body-sm":["Plus Jakarta Sans"],"body-md":["Plus Jakarta Sans"],"headline-lg":["Plus Jakarta Sans"],"headline-xl-mobile":["Plus Jakarta Sans"],"headline-md":["Plus Jakarta Sans"],"headline-lg-mobile":["Plus Jakarta Sans"],"label-caps":["JetBrains Mono"],"code-md":["JetBrains Mono"],"headline-xl":["Plus Jakarta Sans"]},fontSize:{"body-lg":["16px",{lineHeight:"24px",letterSpacing:"-0.005em",fontWeight:"400"}],"code-lg":["14px",{lineHeight:"20px",fontWeight:"500"}],"code-sm":["11px",{lineHeight:"16px",fontWeight:"400"}],"body-sm":["12px",{lineHeight:"18px",fontWeight:"400"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"headline-lg":["24px",{lineHeight:"32px",letterSpacing:"-0.015em",fontWeight:"600"}],"headline-xl-mobile":["24px",{lineHeight:"32px",letterSpacing:"-0.015em",fontWeight:"700"}],"headline-md":["18px",{lineHeight:"26px",letterSpacing:"-0.01em",fontWeight:"600"}],"headline-lg-mobile":["20px",{lineHeight:"28px",letterSpacing:"-0.01em",fontWeight:"600"}],"label-caps":["11px",{lineHeight:"14px",letterSpacing:"0.06em",fontWeight:"600"}],"code-md":["12px",{lineHeight:"18px",fontWeight:"400"}],"headline-xl":["32px",{lineHeight:"40px",letterSpacing:"-0.02em",fontWeight:"700"}]}}}};</script></head><body class="bg-background font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-72 bg-surface-container-low z-50 flex flex-col justify-between border-r border-outline-variant/30"><div class="flex flex-col flex-1 min-h-0"><div class="h-16 px-space-lg flex items-center justify-between border-b border-outline-variant/20"><div class="flex items-center gap-space-sm"><img alt="NexusVPS Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1WqFex0-zS30Poq_wJw8QTQ-uI2om2iK-rgPs1vJFiTLjtAtUmHV7qaz9PypuUwg0f81-Pqwa1qAiWGEAdMNrzHy3KCuEXacBC9ewQEo5qLJz33mriuCtzFjGxA6pw9uoTmOgU0hdoS7wbyuIqDdDr92780-KsN6SFIbbVOMzhUsZR_-por5_snWVmtViM1bpNq0V_ueFmb9vP45lHt7jpvGp2ssPdKoPtkZNALOa5pPGWNGhF_IjEz-Ow"/><span class="font-headline-md text-headline-md tracking-tight font-bold text-on-surface">Nexus<span class="text-primary">VPS</span></span></div><span class="font-label-caps text-label-caps px-space-xs py-0.5 rounded-lg bg-surface-container-highest text-on-surface-variant uppercase">v2.4</span></div><div class="p-space-md border-b border-outline-variant/20"><label class="block font-label-caps text-label-caps text-outline uppercase mb-space-xs">Target Server Node</label><button class="w-full flex items-center justify-between p-space-sm rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-left" type="button"><div class="flex items-center gap-space-sm overflow-hidden"><span class="flex h-2 w-2 rounded-full bg-secondary ring-2 ring-secondary/20 shrink-0 animate-pulse"></span><div class="truncate"><p class="font-code-md text-code-md font-medium text-on-surface truncate">sgp-core-node-01</p><p class="font-code-sm text-code-sm text-outline font-mono truncate">103.14.88.24</p></div></div><span class="material-symbols-outlined text-outline text-base shrink-0">unfold_more</span></button></div><div class="flex-1 overflow-y-auto px-space-md py-space-md space-y-space-lg"><div class="space-y-space-xs"><div class="px-space-sm font-label-caps text-label-caps text-outline uppercase">Workspace Control</div><nav class="flex flex-col gap-space-xs" data-active-classes="bg-surface-container-high text-primary font-medium rounded-lg"><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-body-md text-body-md" data-path="overview-metrics" href="#"><span class="material-symbols-outlined text-lg">dashboard</span>Overview &amp; Metrics</a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-body-md text-body-md" data-path="containers-deploy" href="#"><span class="material-symbols-outlined text-lg">layers</span>Containers &amp; Deploy</a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-body-md text-body-md" data-path="terminal-logs" href="#"><span class="material-symbols-outlined text-lg">terminal</span>Terminal &amp; Logs</a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-body-md text-body-md" data-path="security-backups" href="#"><span class="material-symbols-outlined text-lg">verified_user</span>Security &amp; Backups</a></nav></div><div class="space-y-space-xs"><div class="px-space-sm font-label-caps text-label-caps text-outline uppercase">Quick Telemetry</div><div class="space-y-space-xs px-space-sm"><div class="flex justify-between items-center font-code-sm text-code-sm"><span class="text-on-surface-variant">CPU Load</span><span class="text-primary font-mono">32.4%</span></div><div class="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden"><div class="h-full bg-primary" style="width: 32.4%"></div></div><div class="flex justify-between items-center font-code-sm text-code-sm pt-space-xs"><span class="text-on-surface-variant">RAM Memory</span><span class="text-secondary font-mono">5.2 / 8 GB</span></div><div class="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden"><div class="h-full bg-secondary" style="width: 65%"></div></div></div></div></div></div><div class="p-space-md border-t border-outline-variant/20 bg-surface-container-lowest/50"><div class="p-space-sm rounded-lg bg-surface-container space-y-space-xs"><div class="flex items-center justify-between"><span class="font-label-caps text-label-caps text-on-surface-variant font-semibold uppercase">Host Specifications</span><span class="inline-flex items-center gap-1 font-label-caps text-label-caps text-secondary bg-secondary/10 px-1.5 py-0.5 rounded"><span class="h-1.5 w-1.5 rounded-full bg-secondary animate-ping"></span>ONLINE</span></div><div class="grid grid-cols-2 gap-x-space-sm gap-y-1 pt-space-xs font-code-sm text-code-sm text-on-surface-variant"><div class="truncate">OS: <span class="text-on-surface font-mono">Ubuntu 24.04</span></div><div class="text-right truncate">vCPU: <span class="text-on-surface font-mono">4 Cores</span></div><div class="truncate">Memory: <span class="text-on-surface font-mono">8 GB RAM</span></div><div class="text-right truncate">Uptime: <span class="text-on-surface font-mono">42d 18h</span></div></div></div></div></aside><div class="pl-72"><header class="fixed top-0 left-72 right-0 h-16 bg-surface-container-low/80 backdrop-blur-xl border-b border-outline-variant/30 z-40 flex items-center justify-between px-gutter-lg"><div class="flex items-center gap-space-lg flex-1 max-w-xl"><button class="w-full flex items-center justify-between px-space-md py-space-xs rounded-lg bg-surface-container text-on-surface-variant border border-outline-variant/40 hover:border-outline transition-colors" type="button"><div class="flex items-center gap-space-sm font-body-sm text-body-sm"><span class="material-symbols-outlined text-base">search</span><span>Search resources, containers, logs...</span></div><kbd class="font-code-sm text-code-sm px-1.5 py-0.5 rounded bg-surface-container-highest text-outline border border-outline-variant/50">⌘K</kbd></button></div><div class="flex items-center gap-space-md"><div class="hidden md:flex items-center gap-space-xs font-code-sm text-code-sm px-space-sm py-1 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface-variant"><span class="h-2 w-2 rounded-full bg-secondary"></span><span>Global Mesh: <strong class="text-on-surface">Nominal</strong></span></div><button class="flex items-center gap-space-xs px-space-md py-space-xs rounded-lg bg-error-container/20 text-error border border-error/30 hover:bg-error-container/40 transition-colors font-body-sm text-body-sm" type="button"><span class="material-symbols-outlined text-base">power_settings_new</span><span>Reboot / Power</span></button><div class="h-6 w-px bg-outline-variant/40"></div><button class="relative p-space-xs text-on-surface-variant hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-xl">notifications</span><span class="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary"></span></button><div class="flex items-center gap-space-sm pl-space-xs"><div class="text-right hidden sm:block"><p class="font-body-sm text-body-sm font-semibold text-on-surface leading-tight">alex.root</p><p class="font-code-sm text-code-sm text-outline leading-tight">Cluster Admin</p></div><img alt="Profile" class="w-8 h-8 rounded-full object-cover ring-1 ring-outline-variant/50" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCrd1MLSOOC9tFPGVpclTF6zuWu_bjD23LdaWGtvQ9rgSI43NN90Gbo9U7k2ppXCTkILU0_ULeARMtp9zzYImKF0LqkIP8QAb4LAtsmTZziX71fASxdV_0hFAAZettS2EAFwSpdGrz67gIhicHVWsEssGI0hC-qnU3TbYI3NGgayPs-hotBc_72WD9MCVxrXUktKQ_nvYZ_m_nl_k7ICpBhcW_tAVxVbeX35PhdFwARt63YPZSD_AdE"/></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="px-gutter-lg py-margin space-y-gutter-lg max-w-[1600px] mx-auto w-full">
+<!-- Top Operational Metrics & Actions Header -->
+<div class="flex flex-col xl:flex-row xl:items-center justify-between gap-space-lg bg-surface-container-low p-space-lg rounded-xl shadow-md relative overflow-hidden">
+<div class="absolute -right-16 -top-16 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center gap-space-sm">
+<span class="font-label-caps text-label-caps text-primary tracking-widest uppercase bg-primary/10 px-2 py-0.5 rounded">DOCKER ENGINE &amp; ORCHESTRATION</span>
+<span class="inline-flex items-center gap-1.5 font-label-caps text-label-caps text-secondary bg-secondary/10 px-2 py-0.5 rounded">
+<span class="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse"></span>
+            DAEMON 26.1.1 ACTIVE
+          </span>
+</div>
+<h1 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">Application &amp; Container Fleet</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Real-time container virtualization, GitOps automation pipeline, and declarative workloads.</p>
+</div>
+<!-- Quick Telemetry Counters -->
+<div class="flex flex-wrap items-center gap-space-md">
+<div class="grid grid-cols-5 gap-space-xs bg-surface-container-lowest p-1.5 rounded-lg shadow-inner">
+<div class="px-space-md py-1 text-center bg-surface-container rounded">
+<span class="block font-code-sm text-code-sm text-on-surface-variant font-mono uppercase">Running</span>
+<span class="font-code-lg text-code-lg font-bold text-secondary font-mono">14</span>
+</div>
+<div class="px-space-md py-1 text-center bg-surface-container rounded">
+<span class="block font-code-sm text-code-sm text-on-surface-variant font-mono uppercase">Stopped</span>
+<span class="font-code-lg text-code-lg font-bold text-tertiary font-mono">2</span>
+</div>
+<div class="px-space-md py-1 text-center bg-surface-container rounded">
+<span class="block font-code-sm text-code-sm text-on-surface-variant font-mono uppercase">Failed</span>
+<span class="font-code-lg text-code-lg font-bold text-outline font-mono">0</span>
+</div>
+<div class="px-space-md py-1 text-center bg-surface-container rounded">
+<span class="block font-code-sm text-code-sm text-on-surface-variant font-mono uppercase">Volumes</span>
+<span class="font-code-lg text-code-lg font-bold text-on-surface font-mono">6</span>
+</div>
+<div class="px-space-md py-1 text-center bg-surface-container rounded">
+<span class="block font-code-sm text-code-sm text-on-surface-variant font-mono uppercase">Networks</span>
+<span class="font-code-lg text-code-lg font-bold text-primary font-mono">3</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="flex items-center gap-space-xs px-space-md py-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-base text-primary">data_object</span>
+<span>Compose Stack</span>
+</button>
+<button class="flex items-center gap-space-xs px-space-md py-2.5 rounded-lg bg-primary-container text-on-primary font-body-sm text-body-sm font-semibold hover:brightness-110 transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-base">add_circle</span>
+<span>+ Deploy New App</span>
+</button>
+</div>
+</div>
+</div>
+<!-- One-Click App Store Banner / Fast Launchers -->
+<div class="flex flex-col gap-space-md bg-surface-container-low p-space-lg rounded-xl shadow-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-xl">rocket_launch</span>
+<span class="font-headline-md text-headline-md font-semibold text-on-surface">1-Click Fast Application Blueprints</span>
+<span class="font-code-sm text-code-sm text-outline px-2 py-0.5 rounded bg-surface-container-highest">Curated Stacks</span>
+</div>
+<a class="font-code-sm text-code-sm text-primary hover:underline flex items-center gap-1" href="#">
+          Explore Hub Catalog (48+) <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</a>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-space-sm">
+<!-- Blueprint 1: PostgreSQL -->
+<div class="flex flex-col justify-between p-space-md bg-surface-container hover:bg-surface-container-high rounded-lg transition-all group shadow-sm">
+<div class="flex items-start justify-between">
+<div class="w-8 h-8 rounded bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-lg">database</span>
+</div>
+<span class="font-code-sm text-code-sm text-secondary bg-secondary/10 px-1.5 py-0.2 rounded font-mono">v16.2</span>
+</div>
+<div class="my-space-sm">
+<h4 class="font-headline-md text-headline-md text-on-surface text-sm font-semibold truncate">PostgreSQL</h4>
+<p class="font-code-sm text-code-sm text-outline truncate">Relational DB</p>
+</div>
+<button class="w-full py-1 px-2 rounded bg-surface-container-highest hover:bg-primary-container hover:text-on-primary font-code-sm text-code-sm text-on-surface-variant transition-colors flex items-center justify-center gap-1" type="button">
+<span class="material-symbols-outlined text-xs">bolt</span> Launch
+          </button>
+</div>
+<!-- Blueprint 2: Redis -->
+<div class="flex flex-col justify-between p-space-md bg-surface-container hover:bg-surface-container-high rounded-lg transition-all group shadow-sm">
+<div class="flex items-start justify-between">
+<div class="w-8 h-8 rounded bg-error-container/30 flex items-center justify-center text-error group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-lg">memory</span>
+</div>
+<span class="font-code-sm text-code-sm text-secondary bg-secondary/10 px-1.5 py-0.2 rounded font-mono">v7.2</span>
+</div>
+<div class="my-space-sm">
+<h4 class="font-headline-md text-headline-md text-on-surface text-sm font-semibold truncate">Redis In-Memory</h4>
+<p class="font-code-sm text-code-sm text-outline truncate">Key-Value Cache</p>
+</div>
+<button class="w-full py-1 px-2 rounded bg-surface-container-highest hover:bg-primary-container hover:text-on-primary font-code-sm text-code-sm text-on-surface-variant transition-colors flex items-center justify-center gap-1" type="button">
+<span class="material-symbols-outlined text-xs">bolt</span> Launch
+          </button>
+</div>
+<!-- Blueprint 3: Strapi -->
+<div class="flex flex-col justify-between p-space-md bg-surface-container hover:bg-surface-container-high rounded-lg transition-all group shadow-sm">
+<div class="flex items-start justify-between">
+<div class="w-8 h-8 rounded bg-primary-fixed-dim/20 flex items-center justify-center text-primary-fixed-dim group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-lg">view_quilt</span>
+</div>
+<span class="font-code-sm text-code-sm text-outline bg-surface-container-highest px-1.5 py-0.2 rounded font-mono">v4.20</span>
+</div>
+<div class="my-space-sm">
+<h4 class="font-headline-md text-headline-md text-on-surface text-sm font-semibold truncate">Strapi CMS</h4>
+<p class="font-code-sm text-code-sm text-outline truncate">Headless Node</p>
+</div>
+<button class="w-full py-1 px-2 rounded bg-surface-container-highest hover:bg-primary-container hover:text-on-primary font-code-sm text-code-sm text-on-surface-variant transition-colors flex items-center justify-center gap-1" type="button">
+<span class="material-symbols-outlined text-xs">bolt</span> Launch
+          </button>
+</div>
+<!-- Blueprint 4: Next.js -->
+<div class="flex flex-col justify-between p-space-md bg-surface-container hover:bg-surface-container-high rounded-lg transition-all group shadow-sm">
+<div class="flex items-start justify-between">
+<div class="w-8 h-8 rounded bg-surface-bright flex items-center justify-center text-on-surface group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-lg">code_blocks</span>
+</div>
+<span class="font-code-sm text-code-sm text-secondary bg-secondary/10 px-1.5 py-0.2 rounded font-mono">v14.2</span>
+</div>
+<div class="my-space-sm">
+<h4 class="font-headline-md text-headline-md text-on-surface text-sm font-semibold truncate">Next.js Web</h4>
+<p class="font-code-sm text-code-sm text-outline truncate">SSR React Node</p>
+</div>
+<button class="w-full py-1 px-2 rounded bg-surface-container-highest hover:bg-primary-container hover:text-on-primary font-code-sm text-code-sm text-on-surface-variant transition-colors flex items-center justify-center gap-1" type="button">
+<span class="material-symbols-outlined text-xs">bolt</span> Launch
+          </button>
+</div>
+<!-- Blueprint 5: WordPress -->
+<div class="flex flex-col justify-between p-space-md bg-surface-container hover:bg-surface-container-high rounded-lg transition-all group shadow-sm">
+<div class="flex items-start justify-between">
+<div class="w-8 h-8 rounded bg-primary/20 flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-lg">web</span>
+</div>
+<span class="font-code-sm text-code-sm text-outline bg-surface-container-highest px-1.5 py-0.2 rounded font-mono">v6.5</span>
+</div>
+<div class="my-space-sm">
+<h4 class="font-headline-md text-headline-md text-on-surface text-sm font-semibold truncate">WordPress + DB</h4>
+<p class="font-code-sm text-code-sm text-outline truncate">Full LAMP Stack</p>
+</div>
+<button class="w-full py-1 px-2 rounded bg-surface-container-highest hover:bg-primary-container hover:text-on-primary font-code-sm text-code-sm text-on-surface-variant transition-colors flex items-center justify-center gap-1" type="button">
+<span class="material-symbols-outlined text-xs">bolt</span> Launch
+          </button>
+</div>
+<!-- Blueprint 6: Meilisearch -->
+<div class="flex flex-col justify-between p-space-md bg-surface-container hover:bg-surface-container-high rounded-lg transition-all group shadow-sm">
+<div class="flex items-start justify-between">
+<div class="w-8 h-8 rounded bg-tertiary/20 flex items-center justify-center text-tertiary group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-lg">manage_search</span>
+</div>
+<span class="font-code-sm text-code-sm text-secondary bg-secondary/10 px-1.5 py-0.2 rounded font-mono">v1.7</span>
+</div>
+<div class="my-space-sm">
+<h4 class="font-headline-md text-headline-md text-on-surface text-sm font-semibold truncate">Meilisearch</h4>
+<p class="font-code-sm text-code-sm text-outline truncate">Lightning Search</p>
+</div>
+<button class="w-full py-1 px-2 rounded bg-surface-container-highest hover:bg-primary-container hover:text-on-primary font-code-sm text-code-sm text-on-surface-variant transition-colors flex items-center justify-center gap-1" type="button">
+<span class="material-symbols-outlined text-xs">bolt</span> Launch
+          </button>
+</div>
+<!-- Blueprint 7: Ollama AI -->
+<div class="flex flex-col justify-between p-space-md bg-surface-container hover:bg-surface-container-high rounded-lg transition-all group shadow-sm">
+<div class="flex items-start justify-between">
+<div class="w-8 h-8 rounded bg-secondary/20 flex items-center justify-center text-secondary group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-lg">neurology</span>
+</div>
+<span class="font-code-sm text-code-sm text-primary bg-primary/10 px-1.5 py-0.2 rounded font-mono">LLM</span>
+</div>
+<div class="my-space-sm">
+<h4 class="font-headline-md text-headline-md text-on-surface text-sm font-semibold truncate">Ollama AI</h4>
+<p class="font-code-sm text-code-sm text-outline truncate">Local Inference</p>
+</div>
+<button class="w-full py-1 px-2 rounded bg-surface-container-highest hover:bg-primary-container hover:text-on-primary font-code-sm text-code-sm text-on-surface-variant transition-colors flex items-center justify-center gap-1" type="button">
+<span class="material-symbols-outlined text-xs">bolt</span> Launch
+          </button>
+</div>
+</div>
+</div>
+<!-- Main Dynamic Section: Split Table & Deployment CI/CD Pipeline -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-space-lg">
+<!-- Left Column: Active Containers (8 Cols on XL) -->
+<div class="xl:col-span-8 flex flex-col gap-space-md">
+<!-- Filter and Search Header -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm bg-surface-container-low p-space-md rounded-xl shadow-md">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-md text-headline-md font-semibold text-on-surface">Active Deployments</span>
+<span class="font-code-sm text-code-sm px-2 py-0.5 rounded-full bg-secondary/20 text-secondary font-mono">5 Monitored</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-2 text-outline text-base">filter_list</span>
+<input class="bg-surface-container-lowest text-on-surface font-code-sm text-code-sm pl-8 pr-3 py-1.5 rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-primary w-48 sm:w-64 placeholder:text-outline/70" placeholder="Filter by name, port, tag..." type="text"/>
+</div>
+<button class="p-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors" type="button">
+<span class="material-symbols-outlined text-base">refresh</span>
+</button>
+</div>
+</div>
+<!-- Container Deployment Cards -->
+<div class="space-y-space-sm">
+<!-- Card 1: production-api -->
+<div class="bg-surface-container-low hover:bg-surface-container/60 rounded-xl p-space-md transition-all shadow-md group">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-start gap-space-md min-w-0">
+<div class="p-2.5 rounded-lg bg-surface-container-lowest text-primary shrink-0 group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-xl">api</span>
+</div>
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-space-xs mb-1">
+<span class="font-code-lg text-code-lg font-bold text-on-surface tracking-tight">production-api</span>
+<span class="inline-flex items-center gap-1 font-label-caps text-label-caps px-2 py-0.5 rounded bg-secondary/15 text-secondary">
+<span class="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse"></span>
+                      RUNNING (UP 18D)
+                    </span>
+<span class="inline-flex items-center gap-1 font-label-caps text-label-caps px-2 py-0.5 rounded bg-primary/10 text-primary">
+<span class="material-symbols-outlined text-xs">lock</span> AUTO SSL
+                    </span>
+</div>
+<div class="flex flex-wrap items-center gap-x-space-md gap-y-1 font-code-sm text-code-sm text-outline">
+<span class="text-on-surface-variant font-mono">Node.js 20 / Fastify</span>
+<span>•</span>
+<span class="text-primary font-mono flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">link</span> api.nexus.io
+                    </span>
+<span>•</span>
+<span class="font-mono">Port: 3000 → 443</span>
+</div>
+</div>
+</div>
+<!-- Metrics & Inline Controls -->
+<div class="flex items-center justify-between md:justify-end gap-space-lg shrink-0 pt-space-xs md:pt-0">
+<div class="flex items-center gap-space-md">
+<div class="text-right">
+<span class="block font-code-sm text-code-sm text-outline">CPU</span>
+<span class="font-code-md text-code-md font-mono text-on-surface font-semibold">4.2%</span>
+</div>
+<div class="w-16 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 21%"></div>
+</div>
+<div class="text-right">
+<span class="block font-code-sm text-code-sm text-outline">Memory</span>
+<span class="font-code-md text-code-md font-mono text-secondary font-semibold">210 MB</span>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-colors" title="Restart Container">
+<span class="material-symbols-outlined text-base">restart_alt</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-primary transition-colors" title="View Logs">
+<span class="material-symbols-outlined text-base">subject</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-secondary transition-colors" title="Terminal Shell Exec">
+<span class="material-symbols-outlined text-base">terminal</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-colors" title="Settings">
+<span class="material-symbols-outlined text-base">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 2: nextjs-web-frontend -->
+<div class="bg-surface-container-low hover:bg-surface-container/60 rounded-xl p-space-md transition-all shadow-md group">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-start gap-space-md min-w-0">
+<div class="p-2.5 rounded-lg bg-surface-container-lowest text-on-surface shrink-0 group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-xl">language</span>
+</div>
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-space-xs mb-1">
+<span class="font-code-lg text-code-lg font-bold text-on-surface tracking-tight">nextjs-web-frontend</span>
+<span class="inline-flex items-center gap-1 font-label-caps text-label-caps px-2 py-0.5 rounded bg-secondary/15 text-secondary">
+<span class="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse"></span>
+                      RUNNING (UP 4D)
+                    </span>
+<span class="inline-flex items-center gap-1 font-label-caps text-label-caps px-2 py-0.5 rounded bg-secondary/10 text-secondary font-mono">
+<span class="material-symbols-outlined text-xs">alt_route</span> GIT: MAIN
+                    </span>
+</div>
+<div class="flex flex-wrap items-center gap-x-space-md gap-y-1 font-code-sm text-code-sm text-outline">
+<span class="text-on-surface-variant font-mono">Next.js 14 Standalone</span>
+<span>•</span>
+<span class="text-primary font-mono flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">link</span> nexus.io
+                    </span>
+<span>•</span>
+<span class="font-mono">Port: 3001 → 443</span>
+</div>
+</div>
+</div>
+<!-- Metrics & Controls -->
+<div class="flex items-center justify-between md:justify-end gap-space-lg shrink-0 pt-space-xs md:pt-0">
+<div class="flex items-center gap-space-md">
+<div class="text-right">
+<span class="block font-code-sm text-code-sm text-outline">CPU</span>
+<span class="font-code-md text-code-md font-mono text-on-surface font-semibold">1.8%</span>
+</div>
+<div class="w-16 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 14%"></div>
+</div>
+<div class="text-right">
+<span class="block font-code-sm text-code-sm text-outline">Memory</span>
+<span class="font-code-md text-code-md font-mono text-secondary font-semibold">345 MB</span>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-colors" title="Restart Container">
+<span class="material-symbols-outlined text-base">restart_alt</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-primary transition-colors" title="View Logs">
+<span class="material-symbols-outlined text-base">subject</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-secondary transition-colors" title="Terminal Shell Exec">
+<span class="material-symbols-outlined text-base">terminal</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-colors" title="Settings">
+<span class="material-symbols-outlined text-base">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 3: postgres-cluster-01 -->
+<div class="bg-surface-container-low hover:bg-surface-container/60 rounded-xl p-space-md transition-all shadow-md group">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-start gap-space-md min-w-0">
+<div class="p-2.5 rounded-lg bg-surface-container-lowest text-primary shrink-0 group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-xl">database</span>
+</div>
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-space-xs mb-1">
+<span class="font-code-lg text-code-lg font-bold text-on-surface tracking-tight">postgres-cluster-01</span>
+<span class="inline-flex items-center gap-1 font-label-caps text-label-caps px-2 py-0.5 rounded bg-secondary/15 text-secondary">
+<span class="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse"></span>
+                      HEALTHY (UP 42D)
+                    </span>
+<span class="font-label-caps text-label-caps px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-mono">
+                      VOL: 24GB
+                    </span>
+</div>
+<div class="flex flex-wrap items-center gap-x-space-md gap-y-1 font-code-sm text-code-sm text-outline">
+<span class="text-on-surface-variant font-mono">postgres:16-alpine</span>
+<span>•</span>
+<span class="font-mono">Port: 5432 (Isolated VPC)</span>
+<span>•</span>
+<span class="font-mono text-outline">Mount: /var/lib/postgresql/data</span>
+</div>
+</div>
+</div>
+<!-- Metrics & Controls -->
+<div class="flex items-center justify-between md:justify-end gap-space-lg shrink-0 pt-space-xs md:pt-0">
+<div class="flex items-center gap-space-md">
+<div class="text-right">
+<span class="block font-code-sm text-code-sm text-outline">CPU</span>
+<span class="font-code-md text-code-md font-mono text-on-surface font-semibold">8.1%</span>
+</div>
+<div class="w-16 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 42%"></div>
+</div>
+<div class="text-right">
+<span class="block font-code-sm text-code-sm text-outline">Memory</span>
+<span class="font-code-md text-code-md font-mono text-secondary font-semibold">720 MB</span>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-colors" title="Restart Container">
+<span class="material-symbols-outlined text-base">restart_alt</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-primary transition-colors" title="View Logs">
+<span class="material-symbols-outlined text-base">subject</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-secondary transition-colors" title="Terminal Shell Exec">
+<span class="material-symbols-outlined text-base">terminal</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-colors" title="Settings">
+<span class="material-symbols-outlined text-base">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 4: redis-cache -->
+<div class="bg-surface-container-low hover:bg-surface-container/60 rounded-xl p-space-md transition-all shadow-md group">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-start gap-space-md min-w-0">
+<div class="p-2.5 rounded-lg bg-surface-container-lowest text-error shrink-0 group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-xl">storage</span>
+</div>
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-space-xs mb-1">
+<span class="font-code-lg text-code-lg font-bold text-on-surface tracking-tight">redis-cache</span>
+<span class="inline-flex items-center gap-1 font-label-caps text-label-caps px-2 py-0.5 rounded bg-secondary/15 text-secondary">
+<span class="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse"></span>
+                      RUNNING (UP 42D)
+                    </span>
+<span class="font-label-caps text-label-caps px-2 py-0.5 rounded bg-surface-container-highest text-outline font-mono">
+                      INTERNAL ONLY
+                    </span>
+</div>
+<div class="flex flex-wrap items-center gap-x-space-md gap-y-1 font-code-sm text-code-sm text-outline">
+<span class="text-on-surface-variant font-mono">redis:7-alpine</span>
+<span>•</span>
+<span class="font-mono">Port: 6379 (Mesh bridge)</span>
+<span>•</span>
+<span class="font-mono text-secondary">AOF Persistence ON</span>
+</div>
+</div>
+</div>
+<!-- Metrics & Controls -->
+<div class="flex items-center justify-between md:justify-end gap-space-lg shrink-0 pt-space-xs md:pt-0">
+<div class="flex items-center gap-space-md">
+<div class="text-right">
+<span class="block font-code-sm text-code-sm text-outline">CPU</span>
+<span class="font-code-md text-code-md font-mono text-on-surface font-semibold">0.4%</span>
+</div>
+<div class="w-16 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 4%"></div>
+</div>
+<div class="text-right">
+<span class="block font-code-sm text-code-sm text-outline">Memory</span>
+<span class="font-code-md text-code-md font-mono text-secondary font-semibold">140 MB</span>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-colors" title="Restart Container">
+<span class="material-symbols-outlined text-base">restart_alt</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-primary transition-colors" title="View Logs">
+<span class="material-symbols-outlined text-base">subject</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-secondary transition-colors" title="Terminal Shell Exec">
+<span class="material-symbols-outlined text-base">terminal</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-colors" title="Settings">
+<span class="material-symbols-outlined text-base">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 5: worker-bullmq -->
+<div class="bg-surface-container-low hover:bg-surface-container/60 rounded-xl p-space-md transition-all shadow-md group">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-start gap-space-md min-w-0">
+<div class="p-2.5 rounded-lg bg-surface-container-lowest text-tertiary shrink-0 group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-xl">fork_right</span>
+</div>
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-space-xs mb-1">
+<span class="font-code-lg text-code-lg font-bold text-on-surface tracking-tight">worker-bullmq</span>
+<span class="inline-flex items-center gap-1 font-label-caps text-label-caps px-2 py-0.5 rounded bg-secondary/15 text-secondary">
+<span class="h-1.5 w-1.5 rounded-full bg-secondary"></span>
+                      ACTIVE (12 CONSUMERS)
+                    </span>
+<span class="font-label-caps text-label-caps px-2 py-0.5 rounded bg-tertiary/10 text-tertiary font-mono">
+                      ASYNC JOBS
+                    </span>
+</div>
+<div class="flex flex-wrap items-center gap-x-space-md gap-y-1 font-code-sm text-code-sm text-outline">
+<span class="text-on-surface-variant font-mono">TypeScript / BullMQ v5</span>
+<span>•</span>
+<span class="font-mono">Throughput: 840 jobs/min</span>
+<span>•</span>
+<span class="font-mono text-outline">Queue: tasks-critical</span>
+</div>
+</div>
+</div>
+<!-- Metrics & Controls -->
+<div class="flex items-center justify-between md:justify-end gap-space-lg shrink-0 pt-space-xs md:pt-0">
+<div class="flex items-center gap-space-md">
+<div class="text-right">
+<span class="block font-code-sm text-code-sm text-outline">CPU</span>
+<span class="font-code-md text-code-md font-mono text-on-surface font-semibold">2.9%</span>
+</div>
+<div class="w-16 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 18%"></div>
+</div>
+<div class="text-right">
+<span class="block font-code-sm text-code-sm text-outline">Memory</span>
+<span class="font-code-md text-code-md font-mono text-secondary font-semibold">95 MB</span>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-colors" title="Restart Container">
+<span class="material-symbols-outlined text-base">restart_alt</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-primary transition-colors" title="View Logs">
+<span class="material-symbols-outlined text-base">subject</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-secondary transition-colors" title="Terminal Shell Exec">
+<span class="material-symbols-outlined text-base">terminal</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-colors" title="Settings">
+<span class="material-symbols-outlined text-base">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: GitOps CI/CD Pipeline & Hardware Distribution (4 Cols on XL) -->
+<div class="xl:col-span-4 flex flex-col gap-space-md">
+<!-- Git CI/CD Card -->
+<div class="bg-surface-container-low p-space-lg rounded-xl shadow-md flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-xl">commit</span>
+<span class="font-headline-md text-headline-md font-semibold text-on-surface">Git Continuous Delivery</span>
+</div>
+<span class="h-2 w-2 rounded-full bg-secondary"></span>
+</div>
+<!-- Connected Repo Info -->
+<div class="bg-surface-container p-space-md rounded-lg space-y-space-xs shadow-inner">
+<div class="flex items-center justify-between">
+<span class="font-code-sm text-code-sm text-outline">Repository</span>
+<span class="font-code-sm text-code-sm font-semibold text-primary font-mono flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">code</span> org/nexus-repo
+              </span>
+</div>
+<div class="flex items-center justify-between">
+<span class="font-code-sm text-code-sm text-outline">Target Branch</span>
+<span class="font-code-sm text-code-sm text-on-surface font-mono">refs/heads/main</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="font-code-sm text-code-sm text-outline">Webhook Listener</span>
+<span class="font-code-sm text-code-sm text-secondary font-mono">active: push events</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="font-code-sm text-code-sm text-outline">Build System</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant font-mono">Nixpacks 1.18</span>
+</div>
+</div>
+<!-- Secret Config Preview -->
+<div class="space-y-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-outline uppercase">Environment Secrets (5)</span>
+<button class="font-code-sm text-code-sm text-primary hover:underline">+ Add Key</button>
+</div>
+<div class="space-y-1 font-mono text-xs">
+<div class="flex items-center justify-between bg-surface-container-lowest px-2.5 py-1.5 rounded">
+<span class="text-on-surface font-semibold">DATABASE_URL</span>
+<span class="text-outline">••••••••••••••••</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-lowest px-2.5 py-1.5 rounded">
+<span class="text-on-surface font-semibold">JWT_SIGNING_KEY</span>
+<span class="text-outline">••••••••••••••••</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-lowest px-2.5 py-1.5 rounded">
+<span class="text-on-surface font-semibold">REDIS_PRIVATE_HOST</span>
+<span class="text-outline">10.0.4.12:6379</span>
+</div>
+</div>
+</div>
+<!-- Manual Re-deploy Action -->
+<button class="w-full flex items-center justify-center gap-space-xs py-2 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-base text-primary">play_arrow</span>
+<span>Trigger Webhook Manual Build</span>
+</button>
+</div>
+<!-- Resource Distribution Visualization -->
+<div class="bg-surface-container-low p-space-lg rounded-xl shadow-md flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<span class="font-headline-md text-headline-md font-semibold text-on-surface">Resource Allotment</span>
+<span class="font-code-sm text-code-sm text-outline font-mono">8 GB Host Total</span>
+</div>
+<!-- RAM Multi-Bar Visualization -->
+<div class="space-y-space-xs">
+<div class="flex justify-between items-center font-code-sm text-code-sm">
+<span class="text-on-surface-variant">Allocated Memory</span>
+<span class="font-mono text-on-surface font-semibold">1,510 MB / 8,192 MB (18.4%)</span>
+</div>
+<!-- Segmented Progress Bar -->
+<div class="w-full h-3 bg-surface-container-lowest rounded-full overflow-hidden flex p-0.5 gap-0.5">
+<div class="h-full bg-primary rounded-l-full" style="width: 48%;" title="PostgreSQL: 720MB"></div>
+<div class="h-full bg-secondary" style="width: 23%;" title="Next.js: 345MB"></div>
+<div class="h-full bg-tertiary" style="width: 14%;" title="Fastify API: 210MB"></div>
+<div class="h-full bg-error" style="width: 9%;" title="Redis: 140MB"></div>
+<div class="h-full bg-primary-fixed" style="width: 6%;" title="BullMQ: 95MB"></div>
+</div>
+<!-- Legend Grid -->
+<div class="grid grid-cols-2 gap-y-1.5 pt-space-xs font-code-sm text-code-sm">
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="h-2 w-2 rounded-full bg-primary"></span>
+<span class="truncate">Postgres (720M)</span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="h-2 w-2 rounded-full bg-secondary"></span>
+<span class="truncate">Next.js (345M)</span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="h-2 w-2 rounded-full bg-tertiary"></span>
+<span class="truncate">Fastify (210M)</span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="h-2 w-2 rounded-full bg-error"></span>
+<span class="truncate">Redis (140M)</span>
+</div>
+</div>
+</div>
+<!-- Inline Node Capacity Graph SVG -->
+<div class="p-space-md bg-surface-container rounded-lg flex items-center justify-between">
+<div class="space-y-0.5">
+<span class="font-label-caps text-label-caps text-outline uppercase">Total vCPU Allotment</span>
+<p class="font-headline-md text-headline-md font-bold text-on-surface">17.4% <span class="font-body-sm text-body-sm font-normal text-secondary">Nominal</span></p>
+<span class="font-code-sm text-code-sm text-outline">Load Avg: 0.42, 0.38, 0.31</span>
+</div>
+<!-- Dynamic Mini Area Sparkline -->
+<svg class="w-28 h-12 text-primary" fill="none" viewbox="0 0 112 48" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 40 L16 34 L32 38 L48 24 L64 28 L80 16 L96 22 L112 12 L112 48 L0 48 Z" fill="currentColor" fill-opacity="0.15"></path>
+<path d="M0 40 L16 34 L32 38 L48 24 L64 28 L80 16 L96 22 L112 12" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+</div>
+</div>
+<!-- Live Recessed Build & Docker Daemon Stream Ticker -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-inner flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm font-code-sm text-code-sm text-outline overflow-hidden">
+<span class="material-symbols-outlined text-secondary text-sm shrink-0">terminal</span>
+<span class="text-secondary font-mono shrink-0">docker-event.log:</span>
+<span class="truncate font-mono text-on-surface-variant">
+          [CONTAINER-EVENT] 2025-05-18T14:32:01Z production-api healthcheck: status 200 OK - latency 12ms (healthy)
+        </span>
+</div>
+<div class="flex items-center gap-space-md shrink-0">
+<span class="font-code-sm text-code-sm text-outline font-mono">Stream: WebSocket Sync</span>
+<button class="font-code-sm text-code-sm text-primary hover:underline">Full Log Viewer →</button>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

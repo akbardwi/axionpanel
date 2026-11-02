@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface-dim":"#0b1326","on-tertiary-fixed-variant":"#653e00","secondary-container":"#00a572","secondary-fixed":"#6ffbbe","surface-container":"#171f33","inverse-on-surface":"#283044","on-secondary":"#003824","tertiary-fixed-dim":"#ffb95f","surface-container-lowest":"#060e20","tertiary-fixed":"#ffddb8","secondary-fixed-dim":"#4edea3","on-background":"#dae2fd","error-container":"#93000a","on-tertiary-fixed":"#2a1700","primary-container":"#06b6d4","secondary":"#4edea3","on-error-container":"#ffdad6","inverse-primary":"#00687a","background":"#0b1326","on-primary-fixed":"#001f26","on-secondary-container":"#00311f","on-surface-variant":"#bcc9cd","on-error":"#690005","error":"#ffb4ab","tertiary":"#ffb95f","on-primary":"#003640","surface-bright":"#31394d","on-tertiary-container":"#563400","surface-container-highest":"#2d3449","on-primary-container":"#00424f","primary-fixed":"#acedff","on-secondary-fixed-variant":"#005236","surface-container-high":"#222a3d","surface-container-low":"#131b2e","primary":"#4cd7f6","surface-tint":"#4cd7f6","on-tertiary":"#472a00","tertiary-container":"#e79400","surface":"#0b1326","on-primary-fixed-variant":"#004e5c","outline":"#869397","on-surface":"#dae2fd","outline-variant":"#3d494c","surface-variant":"#2d3449","on-secondary-fixed":"#002113","primary-fixed-dim":"#4cd7f6","inverse-surface":"#dae2fd"},borderRadius:{DEFAULT:"0.125rem",lg:"0.25rem",xl:"0.5rem",full:"0.75rem"},spacing:{"space-xs":"0.25rem","space-xl":"1.5rem","space-md":"0.75rem","margin-lg":"2rem","margin":"1rem","gutter":"1rem","gutter-lg":"1.5rem","space-sm":"0.5rem","margin-md":"1.5rem","space-lg":"1rem"},fontFamily:{"body-lg":["Plus Jakarta Sans"],"code-lg":["JetBrains Mono"],"code-sm":["JetBrains Mono"],"body-sm":["Plus Jakarta Sans"],"body-md":["Plus Jakarta Sans"],"headline-lg":["Plus Jakarta Sans"],"headline-xl-mobile":["Plus Jakarta Sans"],"headline-md":["Plus Jakarta Sans"],"headline-lg-mobile":["Plus Jakarta Sans"],"label-caps":["JetBrains Mono"],"code-md":["JetBrains Mono"],"headline-xl":["Plus Jakarta Sans"]},fontSize:{"body-lg":["16px",{lineHeight:"24px",letterSpacing:"-0.005em",fontWeight:"400"}],"code-lg":["14px",{lineHeight:"20px",fontWeight:"500"}],"code-sm":["11px",{lineHeight:"16px",fontWeight:"400"}],"body-sm":["12px",{lineHeight:"18px",fontWeight:"400"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"headline-lg":["24px",{lineHeight:"32px",letterSpacing:"-0.015em",fontWeight:"600"}],"headline-xl-mobile":["24px",{lineHeight:"32px",letterSpacing:"-0.015em",fontWeight:"700"}],"headline-md":["18px",{lineHeight:"26px",letterSpacing:"-0.01em",fontWeight:"600"}],"headline-lg-mobile":["20px",{lineHeight:"28px",letterSpacing:"-0.01em",fontWeight:"600"}],"label-caps":["11px",{lineHeight:"14px",letterSpacing:"0.06em",fontWeight:"600"}],"code-md":["12px",{lineHeight:"18px",fontWeight:"400"}],"headline-xl":["32px",{lineHeight:"40px",letterSpacing:"-0.02em",fontWeight:"700"}]}}}};</script></head><body class="bg-background font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-72 bg-surface-container-low z-50 flex flex-col justify-between border-r border-outline-variant/30"><div class="flex flex-col flex-1 min-h-0"><div class="h-16 px-space-lg flex items-center justify-between border-b border-outline-variant/20"><div class="flex items-center gap-space-sm"><img alt="NexusVPS Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1WqFex0-zS30Poq_wJw8QTQ-uI2om2iK-rgPs1vJFiTLjtAtUmHV7qaz9PypuUwg0f81-Pqwa1qAiWGEAdMNrzHy3KCuEXacBC9ewQEo5qLJz33mriuCtzFjGxA6pw9uoTmOgU0hdoS7wbyuIqDdDr92780-KsN6SFIbbVOMzhUsZR_-por5_snWVmtViM1bpNq0V_ueFmb9vP45lHt7jpvGp2ssPdKoPtkZNALOa5pPGWNGhF_IjEz-Ow"/><span class="font-headline-md text-headline-md tracking-tight font-bold text-on-surface">Nexus<span class="text-primary">VPS</span></span></div><span class="font-label-caps text-label-caps px-space-xs py-0.5 rounded-lg bg-surface-container-highest text-on-surface-variant uppercase">v2.4</span></div><div class="p-space-md border-b border-outline-variant/20"><label class="block font-label-caps text-label-caps text-outline uppercase mb-space-xs">Target Server Node</label><button class="w-full flex items-center justify-between p-space-sm rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-left" type="button"><div class="flex items-center gap-space-sm overflow-hidden"><span class="flex h-2 w-2 rounded-full bg-secondary ring-2 ring-secondary/20 shrink-0 animate-pulse"></span><div class="truncate"><p class="font-code-md text-code-md font-medium text-on-surface truncate">sgp-core-node-01</p><p class="font-code-sm text-code-sm text-outline font-mono truncate">103.14.88.24</p></div></div><span class="material-symbols-outlined text-outline text-base shrink-0">unfold_more</span></button></div><div class="flex-1 overflow-y-auto px-space-md py-space-md space-y-space-lg"><div class="space-y-space-xs"><div class="px-space-sm font-label-caps text-label-caps text-outline uppercase">Workspace Control</div><nav class="flex flex-col gap-space-xs" data-active-classes="bg-surface-container-high text-primary font-medium rounded-lg"><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-body-md text-body-md" data-path="overview-metrics" href="#"><span class="material-symbols-outlined text-lg">dashboard</span>Overview &amp; Metrics</a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-body-md text-body-md" data-path="containers-deploy" href="#"><span class="material-symbols-outlined text-lg">layers</span>Containers &amp; Deploy</a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-body-md text-body-md" data-path="terminal-logs" href="#"><span class="material-symbols-outlined text-lg">terminal</span>Terminal &amp; Logs</a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-body-md text-body-md" data-path="security-backups" href="#"><span class="material-symbols-outlined text-lg">verified_user</span>Security &amp; Backups</a></nav></div><div class="space-y-space-xs"><div class="px-space-sm font-label-caps text-label-caps text-outline uppercase">Quick Telemetry</div><div class="space-y-space-xs px-space-sm"><div class="flex justify-between items-center font-code-sm text-code-sm"><span class="text-on-surface-variant">CPU Load</span><span class="text-primary font-mono">32.4%</span></div><div class="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden"><div class="h-full bg-primary" style="width: 32.4%"></div></div><div class="flex justify-between items-center font-code-sm text-code-sm pt-space-xs"><span class="text-on-surface-variant">RAM Memory</span><span class="text-secondary font-mono">5.2 / 8 GB</span></div><div class="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden"><div class="h-full bg-secondary" style="width: 65%"></div></div></div></div></div></div><div class="p-space-md border-t border-outline-variant/20 bg-surface-container-lowest/50"><div class="p-space-sm rounded-lg bg-surface-container space-y-space-xs"><div class="flex items-center justify-between"><span class="font-label-caps text-label-caps text-on-surface-variant font-semibold uppercase">Host Specifications</span><span class="inline-flex items-center gap-1 font-label-caps text-label-caps text-secondary bg-secondary/10 px-1.5 py-0.5 rounded"><span class="h-1.5 w-1.5 rounded-full bg-secondary animate-ping"></span>ONLINE</span></div><div class="grid grid-cols-2 gap-x-space-sm gap-y-1 pt-space-xs font-code-sm text-code-sm text-on-surface-variant"><div class="truncate">OS: <span class="text-on-surface font-mono">Ubuntu 24.04</span></div><div class="text-right truncate">vCPU: <span class="text-on-surface font-mono">4 Cores</span></div><div class="truncate">Memory: <span class="text-on-surface font-mono">8 GB RAM</span></div><div class="text-right truncate">Uptime: <span class="text-on-surface font-mono">42d 18h</span></div></div></div></div></aside><div class="pl-72"><header class="fixed top-0 left-72 right-0 h-16 bg-surface-container-low/80 backdrop-blur-xl border-b border-outline-variant/30 z-40 flex items-center justify-between px-gutter-lg"><div class="flex items-center gap-space-lg flex-1 max-w-xl"><button class="w-full flex items-center justify-between px-space-md py-space-xs rounded-lg bg-surface-container text-on-surface-variant border border-outline-variant/40 hover:border-outline transition-colors" type="button"><div class="flex items-center gap-space-sm font-body-sm text-body-sm"><span class="material-symbols-outlined text-base">search</span><span>Search resources, containers, logs...</span></div><kbd class="font-code-sm text-code-sm px-1.5 py-0.5 rounded bg-surface-container-highest text-outline border border-outline-variant/50">⌘K</kbd></button></div><div class="flex items-center gap-space-md"><div class="hidden md:flex items-center gap-space-xs font-code-sm text-code-sm px-space-sm py-1 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface-variant"><span class="h-2 w-2 rounded-full bg-secondary"></span><span>Global Mesh: <strong class="text-on-surface">Nominal</strong></span></div><button class="flex items-center gap-space-xs px-space-md py-space-xs rounded-lg bg-error-container/20 text-error border border-error/30 hover:bg-error-container/40 transition-colors font-body-sm text-body-sm" type="button"><span class="material-symbols-outlined text-base">power_settings_new</span><span>Reboot / Power</span></button><div class="h-6 w-px bg-outline-variant/40"></div><button class="relative p-space-xs text-on-surface-variant hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-xl">notifications</span><span class="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary"></span></button><div class="flex items-center gap-space-sm pl-space-xs"><div class="text-right hidden sm:block"><p class="font-body-sm text-body-sm font-semibold text-on-surface leading-tight">alex.root</p><p class="font-code-sm text-code-sm text-outline leading-tight">Cluster Admin</p></div><img alt="Profile" class="w-8 h-8 rounded-full object-cover ring-1 ring-outline-variant/50" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCrd1MLSOOC9tFPGVpclTF6zuWu_bjD23LdaWGtvQ9rgSI43NN90Gbo9U7k2ppXCTkILU0_ULeARMtp9zzYImKF0LqkIP8QAb4LAtsmTZziX71fASxdV_0hFAAZettS2EAFwSpdGrz67gIhicHVWsEssGI0hC-qnU3TbYI3NGgayPs-hotBc_72WD9MCVxrXUktKQ_nvYZ_m_nl_k7ICpBhcW_tAVxVbeX35PhdFwARt63YPZSD_AdE"/></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Top Node Context & Session Telemetry Ribbon -->
+<div class="px-gutter-lg pt-space-lg pb-space-md bg-surface-container-low flex flex-col gap-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-primary shadow-sm">
+<span class="material-symbols-outlined text-2xl">terminal</span>
+</div>
+<div>
+<div class="flex items-center gap-space-sm">
+<h1 class="font-headline-md text-headline-md font-bold text-on-surface tracking-tight">Web SSH &amp; Live Log Console</h1>
+<span class="px-space-xs py-0.5 rounded font-label-caps text-label-caps bg-secondary/15 text-secondary flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-ping"></span>
+              WS/TLS 1.3 SECURE
+            </span>
+</div>
+<p class="font-code-sm text-code-sm text-on-surface-variant flex items-center gap-space-sm mt-0.5">
+<span>NODE: <strong class="text-on-surface font-mono">sgp-core-node-01</strong></span>
+<span class="text-outline-variant">/</span>
+<span>PUBLIC: <strong class="text-on-surface font-mono">103.14.88.24</strong></span>
+<span class="text-outline-variant">/</span>
+<span>ARCH: <strong class="text-on-surface font-mono">x86_64 Ubuntu 24.04 LTS</strong></span>
+</p>
+</div>
+</div>
+<!-- Quick Session Badges -->
+<div class="flex items-center gap-space-sm flex-wrap">
+<div class="flex items-center gap-space-xs px-space-md py-1.5 rounded-lg bg-surface-container font-code-sm text-code-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-sm text-primary">speed</span>
+<span>RTT:</span>
+<span class="text-secondary font-mono font-medium">18ms</span>
+</div>
+<div class="flex items-center gap-space-xs px-space-md py-1.5 rounded-lg bg-surface-container font-code-sm text-code-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-sm text-tertiary">timer</span>
+<span>Session:</span>
+<span class="text-on-surface font-mono font-medium" id="session-timer">00:34:12</span>
+</div>
+<div class="flex items-center gap-space-xs px-space-md py-1.5 rounded-lg bg-surface-container font-code-sm text-code-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-sm text-outline">key</span>
+<span>Auth:</span>
+<span class="text-primary font-mono font-medium">ed25519-sk</span>
+</div>
+<button class="flex items-center gap-space-xs px-space-md py-1.5 rounded-lg bg-primary-container text-on-primary-container font-body-sm text-body-sm font-semibold hover:brightness-110 transition-all shadow-sm" id="btn-reconnect">
+<span class="material-symbols-outlined text-base">refresh</span>
+<span>Reconnect</span>
+</button>
+</div>
+</div>
+<!-- Target Selector Navigation Pills -->
+<div class="flex items-center justify-between gap-space-md pt-space-xs overflow-x-auto">
+<div class="flex items-center gap-space-xs p-1 rounded-xl bg-surface-container-lowest shrink-0" role="tablist">
+<button aria-selected="true" class="flex items-center gap-space-xs px-space-md py-1.5 rounded-lg bg-surface-container-high text-primary font-code-sm text-code-sm font-semibold shadow-sm transition-all" role="tab">
+<span class="material-symbols-outlined text-base">host</span>
+<span>Host Root Shell (sgp-core-node-01)</span>
+</button>
+<button aria-selected="false" class="flex items-center gap-space-xs px-space-md py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-code-sm text-code-sm transition-all" role="tab">
+<span class="material-symbols-outlined text-base text-secondary">layers</span>
+<span>Container: production-api</span>
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+</button>
+<button aria-selected="false" class="flex items-center gap-space-xs px-space-md py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-code-sm text-code-sm transition-all" role="tab">
+<span class="material-symbols-outlined text-base text-primary">database</span>
+<span>Container: postgres-cluster-01</span>
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+</button>
+<button aria-selected="false" class="flex items-center gap-space-xs px-space-md py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-code-sm text-code-sm transition-all" role="tab">
+<span class="material-symbols-outlined text-base text-tertiary">article</span>
+<span>Systemd Journal Logs</span>
+</button>
+</div>
+<div class="flex items-center gap-space-xs text-on-surface-variant shrink-0 font-code-sm text-code-sm">
+<span class="hidden xl:inline">TTY:</span>
+<span class="bg-surface-container px-space-xs py-0.5 rounded text-on-surface font-mono">/dev/pts/3</span>
+<span class="hidden xl:inline text-outline-variant">•</span>
+<span class="hidden xl:inline">TERM:</span>
+<span class="hidden xl:inline bg-surface-container px-space-xs py-0.5 rounded text-on-surface font-mono">xterm-256color</span>
+</div>
+</div>
+</div>
+<!-- Main Viewport Dual-Panel Workstation -->
+<div class="p-gutter-lg grid grid-cols-1 xl:grid-cols-12 gap-gutter-lg flex-1">
+<!-- PANEL A: Full Interactive SSH Terminal (7 Cols on Ultra-Wide / 12 on Tablet) -->
+<section class="xl:col-span-7 flex flex-col rounded-xl bg-surface-container-lowest overflow-hidden shadow-xl min-h-[580px]">
+<!-- Terminal Header / Titlebar -->
+<div class="px-space-md py-2.5 bg-surface-container-low flex items-center justify-between gap-space-md">
+<!-- Window Controls & Path -->
+<div class="flex items-center gap-space-md min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-error cursor-pointer hover:opacity-80"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-tertiary cursor-pointer hover:opacity-80"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-secondary cursor-pointer hover:opacity-80"></span>
+</div>
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="material-symbols-outlined text-base text-primary">terminal</span>
+<span class="font-code-md text-code-md font-semibold text-on-surface truncate">root@sgp-core-node-01:~#</span>
+<span class="hidden md:inline font-code-sm text-code-sm text-on-surface-variant truncate">(zsh 5.9)</span>
+</div>
+</div>
+<!-- Terminal Quick Action Toolbar -->
+<div class="flex items-center gap-space-xs">
+<button class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" id="btn-split" title="Split Screen (Ctrl+Shift+D)">
+<span class="material-symbols-outlined text-base">vertical_split</span>
+</button>
+<button class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" id="btn-font-dec" title="Decrease Font">
+<span class="material-symbols-outlined text-base">text_decrease</span>
+</button>
+<button class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" id="btn-font-inc" title="Increase Font">
+<span class="material-symbols-outlined text-base">text_increase</span>
+</button>
+<button class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" id="btn-clear" title="Clear Buffer (Ctrl+L)">
+<span class="material-symbols-outlined text-base">clear_all</span>
+</button>
+<button class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" id="btn-copy" title="Copy Selected Buffer">
+<span class="material-symbols-outlined text-base">content_copy</span>
+</button>
+<div class="w-px h-4 bg-surface-container-high mx-0.5"></div>
+<button class="p-1.5 rounded-lg text-primary hover:bg-surface-container transition-colors" id="btn-fullscreen" title="Expand Fullscreen">
+<span class="material-symbols-outlined text-base">fullscreen</span>
+</button>
+</div>
+</div>
+<!-- Terminal Body Content (xterm styled canvas emulation) -->
+<div class="flex-1 p-space-md font-code-sm text-code-sm text-on-surface overflow-y-auto leading-relaxed select-text space-y-3 font-mono bg-surface-container-lowest" id="terminal-body">
+<!-- MOTD Banner Output -->
+<div class="text-on-surface-variant">
+<p class="text-primary font-bold">Welcome to NexusVPS Management Hypervisor v2.4.1 (x86_64)</p>
+<p class="text-on-surface-variant">System information as of Sun May 18 10:44:02 UTC 2025</p>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-space-sm pt-2 text-on-surface">
+<div class="bg-surface-container p-2 rounded">
+<span class="text-outline text-label-caps uppercase block">System Load</span>
+<span class="font-bold text-secondary">0.42, 0.58, 0.49</span>
+</div>
+<div class="bg-surface-container p-2 rounded">
+<span class="text-outline text-label-caps uppercase block">RAM Usage</span>
+<span class="font-bold text-primary">5.21 GB / 8.00 GB</span>
+</div>
+<div class="bg-surface-container p-2 rounded">
+<span class="text-outline text-label-caps uppercase block">Root Volume</span>
+<span class="font-bold text-tertiary">38% of 120GB</span>
+</div>
+<div class="bg-surface-container p-2 rounded">
+<span class="text-outline text-label-caps uppercase block">Active Tunnels</span>
+<span class="font-bold text-secondary">14 Containers</span>
+</div>
+</div>
+<p class="mt-2 text-outline">Last login: Sun May 18 09:12:44 from 223.18.91.242 (ed25519-agent)</p>
+</div>
+<!-- Executed Command 1: docker stats -->
+<div class="pt-2">
+<div class="flex items-center gap-space-xs text-secondary">
+<span class="text-primary font-bold">root@nexus-node</span><span class="text-on-surface">:</span><span class="text-primary">~</span><span class="text-on-surface-variant">#</span>
+<span class="text-on-surface font-semibold">docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}"</span>
+</div>
+<!-- Colorized ASCII / Tabular Output -->
+<div class="mt-2 overflow-x-auto p-space-sm rounded bg-surface-container-low text-on-surface font-mono text-xs">
+<div class="text-outline-variant font-bold pb-1 flex justify-between gap-4">
+<span class="w-44 text-left">CONTAINER</span>
+<span class="w-20 text-right">CPU %</span>
+<span class="w-32 text-right">MEM USAGE / LIMIT</span>
+<span class="w-28 text-right">NET I/O</span>
+<span class="w-24 text-right">PIDS</span>
+</div>
+<div class="flex justify-between gap-4 py-0.5 hover:bg-surface-container text-on-surface">
+<span class="w-44 truncate text-primary font-medium">production-api</span>
+<span class="w-20 text-right text-secondary font-bold">8.42%</span>
+<span class="w-32 text-right text-on-surface">412.3MiB / 2GiB</span>
+<span class="w-28 text-right text-outline">1.2GB / 890MB</span>
+<span class="w-24 text-right text-on-surface-variant">38</span>
+</div>
+<div class="flex justify-between gap-4 py-0.5 hover:bg-surface-container text-on-surface">
+<span class="w-44 truncate text-primary font-medium">postgres-cluster-01</span>
+<span class="w-20 text-right text-secondary font-bold">14.19%</span>
+<span class="w-32 text-right text-on-surface">1.84GiB / 4GiB</span>
+<span class="w-28 text-right text-outline">4.8GB / 12.1GB</span>
+<span class="w-24 text-right text-on-surface-variant">64</span>
+</div>
+<div class="flex justify-between gap-4 py-0.5 hover:bg-surface-container text-on-surface">
+<span class="w-44 truncate text-primary font-medium">redis-cache-layer</span>
+<span class="w-20 text-right text-secondary font-bold">1.05%</span>
+<span class="w-32 text-right text-on-surface">84.2MiB / 512MiB</span>
+<span class="w-28 text-right text-outline">890MB / 1.1GB</span>
+<span class="w-24 text-right text-on-surface-variant">8</span>
+</div>
+<div class="flex justify-between gap-4 py-0.5 hover:bg-surface-container text-on-surface">
+<span class="w-44 truncate text-primary font-medium">nginx-edge-proxy</span>
+<span class="w-20 text-right text-secondary font-bold">3.88%</span>
+<span class="w-32 text-right text-on-surface">62.1MiB / 512MiB</span>
+<span class="w-28 text-right text-outline">18.4GB / 24.6GB</span>
+<span class="w-24 text-right text-on-surface-variant">16</span>
+</div>
+</div>
+</div>
+<!-- Executed Command 2: System Health and Network sockets -->
+<div class="pt-2">
+<div class="flex items-center gap-space-xs text-secondary">
+<span class="text-primary font-bold">root@nexus-node</span><span class="text-on-surface">:</span><span class="text-primary">~</span><span class="text-on-surface-variant">#</span>
+<span class="text-on-surface font-semibold">ip -br -c a &amp;&amp; systemctl is-active nexus-agent wireguard@wg0</span>
+</div>
+<div class="mt-1 text-on-surface-variant">
+<p><span class="text-outline">lo</span> <span class="text-secondary font-bold">UNKNOWN</span>        127.0.0.1/8 ::1/128</p>
+<p><span class="text-outline">eth0</span> <span class="text-secondary font-bold">UP</span>             103.14.88.24/24 2400:cb00::14/64</p>
+<p><span class="text-outline">docker0</span> <span class="text-secondary font-bold">UP</span>             172.17.0.1/16</p>
+<p><span class="text-outline">wg0</span> <span class="text-secondary font-bold">UP</span>             10.88.0.1/24</p>
+<p class="text-secondary pt-1">active</p>
+<p class="text-secondary">active</p>
+</div>
+</div>
+<!-- Active Interactive Line with blinking block cursor -->
+<div class="pt-2 flex items-center gap-space-xs text-secondary">
+<span class="text-primary font-bold">root@nexus-node</span><span class="text-on-surface">:</span><span class="text-primary">~</span><span class="text-on-surface-variant">#</span>
+<input autofocus="" class="flex-1 bg-transparent text-on-surface font-mono outline-none border-none p-0 focus:ring-0 text-code-sm" id="terminal-input" spellcheck="false" type="text" value="journalctl -u docker.service -n 5 --no-pager"/>
+<span class="w-2 h-4 bg-primary inline-block animate-pulse"></span>
+</div>
+</div>
+<!-- Terminal Bottom Status Bar -->
+<div class="px-space-md py-1.5 bg-surface-container-low flex items-center justify-between font-code-sm text-code-sm text-on-surface-variant">
+<div class="flex items-center gap-space-md">
+<span class="flex items-center gap-1.5 text-secondary">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+            CONNECTED (PORT 2222)
+          </span>
+<span class="hidden sm:inline text-outline-variant">|</span>
+<span class="hidden sm:inline">ENCODING: UTF-8</span>
+<span class="hidden md:inline text-outline-variant">|</span>
+<span class="hidden md:inline">118x38 COLS</span>
+</div>
+<div class="flex items-center gap-space-md font-mono">
+<span class="text-outline">ESC to ungrab</span>
+<span class="text-primary">100% BUFFER</span>
+</div>
+</div>
+</section>
+<!-- PANEL B: Live Streaming Log Console (5 Cols on Ultra-Wide / 12 on Tablet) -->
+<section class="xl:col-span-5 flex flex-col rounded-xl bg-surface-container-lowest overflow-hidden shadow-xl min-h-[580px]">
+<!-- Log Viewer Header & Quick Filters -->
+<div class="p-space-md bg-surface-container-low flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-base text-secondary">receipt_long</span>
+<span class="font-headline-md text-body-lg font-bold text-on-surface">Live System Log Ingestion</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<button class="flex items-center gap-1 px-space-sm py-1 rounded bg-secondary/10 text-secondary font-code-sm text-code-sm hover:bg-secondary/20 transition-colors" id="btn-autoscroll">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span id="scroll-status-text">AUTO-SCROLL ON</span>
+</button>
+<div class="relative group">
+<button class="flex items-center gap-1 px-space-sm py-1 rounded bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm transition-colors">
+<span class="material-symbols-outlined text-sm">download</span>
+<span>Export</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Filter Controls Row -->
+<div class="grid grid-cols-1 sm:grid-cols-12 gap-space-xs pt-1">
+<!-- Keyword Search -->
+<div class="sm:col-span-6 relative">
+<span class="material-symbols-outlined text-base text-outline absolute left-2.5 top-2">filter_alt</span>
+<input class="w-full pl-8 pr-2 py-1.5 rounded-lg bg-surface-container text-on-surface placeholder:text-outline font-code-sm text-code-sm outline-none focus:bg-surface-container-high" id="log-search-input" placeholder="Search (e.g. error, 500, nginx)..." type="text"/>
+</div>
+<!-- Log Severity Dropdown Filter -->
+<div class="sm:col-span-3">
+<select class="w-full px-2 py-1.5 rounded-lg bg-surface-container text-on-surface font-code-sm text-code-sm outline-none cursor-pointer hover:bg-surface-container-high" id="log-severity-filter">
+<option value="ALL">ALL LEVELS</option>
+<option value="INFO">INFO ONLY</option>
+<option value="WARN">WARN ONLY</option>
+<option value="ERROR">ERROR ONLY</option>
+</select>
+</div>
+<!-- Time Window Filter -->
+<div class="sm:col-span-3">
+<select class="w-full px-2 py-1.5 rounded-lg bg-surface-container text-on-surface font-code-sm text-code-sm outline-none cursor-pointer hover:bg-surface-container-high">
+<option>Last 15m</option>
+<option>Last 1h</option>
+<option>Last 24h</option>
+<option>Live Stream</option>
+</select>
+</div>
+</div>
+</div>
+<!-- Live Stream Output List -->
+<div class="flex-1 p-space-md font-code-sm text-code-sm overflow-y-auto space-y-1.5 bg-surface-container-lowest max-h-[500px]" id="logs-container">
+<!-- Log Item 1: INFO -->
+<div class="log-row p-1.5 rounded hover:bg-surface-container/60 transition-colors flex flex-col gap-0.5">
+<div class="flex items-center justify-between text-outline">
+<span class="font-mono text-xs">2025-05-18T10:44:18.441Z</span>
+<span class="px-1.5 py-0.2 rounded font-label-caps text-label-caps bg-secondary/10 text-secondary">INFO</span>
+</div>
+<div class="text-on-surface font-mono">
+<span class="text-primary font-semibold">[nginx-proxy]</span> GET /api/v1/metrics - 200 OK - 4.12ms (client: 103.14.88.1)
+          </div>
+</div>
+<!-- Log Item 2: INFO -->
+<div class="log-row p-1.5 rounded hover:bg-surface-container/60 transition-colors flex flex-col gap-0.5">
+<div class="flex items-center justify-between text-outline">
+<span class="font-mono text-xs">2025-05-18T10:44:16.890Z</span>
+<span class="px-1.5 py-0.2 rounded font-label-caps text-label-caps bg-secondary/10 text-secondary">INFO</span>
+</div>
+<div class="text-on-surface font-mono">
+<span class="text-primary font-semibold">[certbot-manager]</span> Let's Encrypt challenge verified successfully for *.nexusvps.internal
+          </div>
+</div>
+<!-- Log Item 3: WARN -->
+<div class="log-row p-1.5 rounded bg-tertiary-container/10 hover:bg-tertiary-container/20 transition-colors flex flex-col gap-0.5">
+<div class="flex items-center justify-between text-tertiary">
+<span class="font-mono text-xs">2025-05-18T10:43:59.201Z</span>
+<span class="px-1.5 py-0.2 rounded font-label-caps text-label-caps bg-tertiary/20 text-tertiary font-bold">WARN</span>
+</div>
+<div class="text-on-surface font-mono">
+<span class="text-tertiary font-semibold">[postgres-cluster-01]</span> Connection pool reaching 76.8% capacity (77/100 active clients)
+          </div>
+</div>
+<!-- Log Item 4: INFO -->
+<div class="log-row p-1.5 rounded hover:bg-surface-container/60 transition-colors flex flex-col gap-0.5">
+<div class="flex items-center justify-between text-outline">
+<span class="font-mono text-xs">2025-05-18T10:43:44.110Z</span>
+<span class="px-1.5 py-0.2 rounded font-label-caps text-label-caps bg-secondary/10 text-secondary">INFO</span>
+</div>
+<div class="text-on-surface font-mono">
+<span class="text-primary font-semibold">[production-api]</span> Redis cluster sync complete: 18,492 keys reconciled in 34ms
+          </div>
+</div>
+<!-- Log Item 5: ERROR -->
+<div class="log-row p-1.5 rounded bg-error-container/15 hover:bg-error-container/25 transition-colors flex flex-col gap-0.5">
+<div class="flex items-center justify-between text-error">
+<span class="font-mono text-xs">2025-05-18T10:42:30.912Z</span>
+<span class="px-1.5 py-0.2 rounded font-label-caps text-label-caps bg-error/20 text-error font-bold">ERROR</span>
+</div>
+<div class="text-on-surface font-mono">
+<span class="text-error font-semibold">[webhook-worker]</span> ConnectionTimeout: Endpoint `https://hooks.slack.com/services/...` returned 504 Gateway Timeout after 5000ms
+          </div>
+</div>
+<!-- Log Item 6: INFO -->
+<div class="log-row p-1.5 rounded hover:bg-surface-container/60 transition-colors flex flex-col gap-0.5">
+<div class="flex items-center justify-between text-outline">
+<span class="font-mono text-xs">2025-05-18T10:41:02.040Z</span>
+<span class="px-1.5 py-0.2 rounded font-label-caps text-label-caps bg-secondary/10 text-secondary">INFO</span>
+</div>
+<div class="text-on-surface font-mono">
+<span class="text-primary font-semibold">[systemd-journal]</span> Daily scheduled logrotate executed on `/var/log/nginx/*.log`. 4 archives rotated.
+          </div>
+</div>
+<!-- Log Item 7: WARN -->
+<div class="log-row p-1.5 rounded bg-tertiary-container/10 hover:bg-tertiary-container/20 transition-colors flex flex-col gap-0.5">
+<div class="flex items-center justify-between text-tertiary">
+<span class="font-mono text-xs">2025-05-18T10:39:22.503Z</span>
+<span class="px-1.5 py-0.2 rounded font-label-caps text-label-caps bg-tertiary/20 text-tertiary font-bold">WARN</span>
+</div>
+<div class="text-on-surface font-mono">
+<span class="text-tertiary font-semibold">[dockerd]</span> Handler for POST /v1.44/containers/create took 892ms (threshold: 500ms)
+          </div>
+</div>
+<!-- Dynamic Injected Line Anchor -->
+<div id="logs-end-anchor"></div>
+</div>
+<!-- Realtime Ingestion Footer Metrics -->
+<div class="px-space-md py-2 bg-surface-container-low flex items-center justify-between font-code-sm text-code-sm text-on-surface-variant">
+<div class="flex items-center gap-space-sm">
+<span class="text-secondary font-medium font-mono">142 eps</span>
+<span class="text-outline-variant">•</span>
+<span>Buffer: <span class="text-on-surface font-mono">1,482 / 5,000 lines</span></span>
+</div>
+<div class="flex items-center gap-space-xs text-xs">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+<span class="text-secondary font-semibold">STREAM ACTIVE</span>
+</div>
+</div>
+</section>
+</div>
+<!-- Bottom Command Palette / Shortcut Reference Bar -->
+<div class="px-gutter-lg pb-gutter-lg">
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex flex-wrap items-center gap-space-md font-code-sm text-code-sm text-on-surface-variant">
+<span class="font-semibold text-on-surface flex items-center gap-1">
+<span class="material-symbols-outlined text-sm text-primary">keyboard</span>
+          Keybindings:
+        </span>
+<div class="flex items-center gap-1">
+<kbd class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface font-mono">Ctrl+L</kbd>
+<span>Clear terminal</span>
+</div>
+<div class="flex items-center gap-1">
+<kbd class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface font-mono">Ctrl+C</kbd>
+<span>Interrupt process</span>
+</div>
+<div class="flex items-center gap-1">
+<kbd class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface font-mono">Ctrl+Shift+F</kbd>
+<span>Find in logs</span>
+</div>
+<div class="flex items-center gap-1">
+<kbd class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface font-mono">Tab</kbd>
+<span>Auto-complete</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm font-code-sm text-code-sm">
+<span class="text-outline">Terminal Engine:</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-primary font-mono font-medium">xterm.js WebGL / PTY Core</span>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Simple Session Timer Counter
+  let totalSeconds = 34 * 60 + 12;
+  const timerElem = document.getElementById('session-timer');
+  setInterval(() => {
+    totalSeconds++;
+    const hrs = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+    const mins = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+    const secs = String(totalSeconds % 60).padStart(2, '0');
+    if (timerElem) timerElem.textContent = `${hrs}:${mins}:${secs}`;
+  }, 1000);
+
+  // Terminal font sizing
+  const terminalBody = document.getElementById('terminal-body');
+  let currentFontSize = 11;
+  document.getElementById('btn-font-inc')?.addEventListener('click', () => {
+    if (currentFontSize < 16) {
+      currentFontSize++;
+      terminalBody.style.fontSize = currentFontSize + 'px';
+    }
+  });
+  document.getElementById('btn-font-dec')?.addEventListener('click', () => {
+    if (currentFontSize > 9) {
+      currentFontSize--;
+      terminalBody.style.fontSize = currentFontSize + 'px';
+    }
+  });
+
+  // Terminal Buffer Clear
+  document.getElementById('btn-clear')?.addEventListener('click', () => {
+    if (terminalBody) {
+      const activeLine = terminalBody.querySelector('.active-line-wrapper') || terminalBody.lastElementChild;
+      terminalBody.innerHTML = `
+        <div class="text-on-surface-variant font-code-sm text-code-sm">
+          <p class="text-primary font-bold">Terminal buffer cleared.</p>
+          <p class="text-outline">Active connection: root@sgp-core-node-01 (TLS 1.3)</p>
+        </div>
+        <div class="pt-2 flex items-center gap-space-xs text-secondary">
+          <span class="text-primary font-bold">root@nexus-node</span><span class="text-on-surface">:</span><span class="text-primary">~</span><span class="text-on-surface-variant">#</span>
+          <input type="text" value="" autofocus spellcheck="false" class="flex-1 bg-transparent text-on-surface font-mono outline-none border-none p-0 focus:ring-0 text-code-sm">
+          <span class="w-2 h-4 bg-primary inline-block animate-pulse"></span>
+        </div>
+      `;
+    }
+  });
+
+  // Terminal Copy Buffer Mock
+  document.getElementById('btn-copy')?.addEventListener('click', () => {
+    if (terminalBody) {
+      navigator.clipboard?.writeText(terminalBody.innerText);
+      const btn = document.getElementById('btn-copy');
+      const original = btn.innerHTML;
+      btn.innerHTML = `<span class="material-symbols-outlined text-base text-secondary">check</span>`;
+      setTimeout(() => { btn.innerHTML = original; }, 1200);
+    }
+  });
+
+  // Fullscreen Mock Toggle
+  document.getElementById('btn-fullscreen')?.addEventListener('click', () => {
+    const termSec = terminalBody.closest('section');
+    if (termSec) {
+      termSec.classList.toggle('xl:col-span-12');
+      termSec.classList.toggle('xl:col-span-7');
+    }
+  });
+
+  // Log Viewer Auto-Scroll toggle
+  let autoScroll = true;
+  const autoscrollBtn = document.getElementById('btn-autoscroll');
+  const scrollStatusText = document.getElementById('scroll-status-text');
+  const logsContainer = document.getElementById('logs-container');
+
+  autoscrollBtn?.addEventListener('click', () => {
+    autoScroll = !autoScroll;
+    if (autoScroll) {
+      autoscrollBtn.className = "flex items-center gap-1 px-space-sm py-1 rounded bg-secondary/10 text-secondary font-code-sm text-code-sm hover:bg-secondary/20 transition-colors";
+      scrollStatusText.textContent = "AUTO-SCROLL ON";
+    } else {
+      autoscrollBtn.className = "flex items-center gap-1 px-space-sm py-1 rounded bg-surface-container text-outline font-code-sm text-code-sm hover:bg-surface-container-high transition-colors";
+      scrollStatusText.textContent = "PAUSED";
+    }
+  });
+
+  // Log Search Filter
+  const logSearchInput = document.getElementById('log-search-input');
+  logSearchInput?.addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase();
+    const rows = document.querySelectorAll('.log-row');
+    rows.forEach(r => {
+      const text = r.textContent.toLowerCase();
+      r.style.display = text.includes(term) ? 'flex' : 'none';
+    });
+  });
+
+  // Log Severity Filter
+  const logSeverityFilter = document.getElementById('log-severity-filter');
+  logSeverityFilter?.addEventListener('change', (e) => {
+    const level = e.target.value;
+    const rows = document.querySelectorAll('.log-row');
+    rows.forEach(r => {
+      if (level === 'ALL') {
+        r.style.display = 'flex';
+      } else {
+        const text = r.textContent;
+        r.style.display = text.includes(level) ? 'flex' : 'none';
+      }
+    });
+  });
+
+  // Simulated Log Ingestion Tick
+  const dummyLogs = [
+    { type: 'INFO', comp: 'production-api', msg: 'POST /v1/auth/tokens 201 Created 1.84ms' },
+    { type: 'INFO', comp: 'nginx-proxy', msg: 'SSL Handshake completed with 194.26.29.112:443 (TLSv1.3)' },
+    { type: 'WARN', comp: 'memory-guard', msg: 'CGroup production-api memory threshold alert: 78% limit reached' },
+    { type: 'INFO', comp: 'postgres-cluster-01', msg: 'checkpoint complete: wrote 428 buffers (2.1%); 0 WAL file(s) added' }
+  ];
+
+  setInterval(() => {
+    if (!autoScroll || !logsContainer) return;
+    const sample = dummyLogs[Math.floor(Math.random() * dummyLogs.length)];
+    const nowIso = new Date().toISOString();
+    
+    let badgeClass = "bg-secondary/10 text-secondary";
+    let rowBg = "hover:bg-surface-container/60";
+    if (sample.type === 'WARN') {
+      badgeClass = "bg-tertiary/20 text-tertiary font-bold";
+      rowBg = "bg-tertiary-container/10 hover:bg-tertiary-container/20";
+    } else if (sample.type === 'ERROR') {
+      badgeClass = "bg-error/20 text-error font-bold";
+      rowBg = "bg-error-container/15 hover:bg-error-container/25";
+    }
+
+    const row = document.createElement('div');
+    row.className = `log-row p-1.5 rounded ${rowBg} transition-colors flex flex-col gap-0.5`;
+    row.innerHTML = `
+      <div class="flex items-center justify-between text-outline">
+        <span class="font-mono text-xs">${nowIso}</span>
+        <span class="px-1.5 py-0.2 rounded font-label-caps text-label-caps ${badgeClass}">${sample.type}</span>
+      </div>
+      <div class="text-on-surface font-mono">
+        <span class="text-primary font-semibold">[${sample.comp}]</span> ${sample.msg}
+      </div>
+    `;
+
+    const anchor = document.getElementById('logs-end-anchor');
+    logsContainer.insertBefore(row, anchor);
+
+    // Keep max 40 rows in memory
+    const allRows = logsContainer.querySelectorAll('.log-row');
+    if (allRows.length > 40) {
+      allRows[0].remove();
+    }
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+  }, 4000);
+</script></main></div></body></html>

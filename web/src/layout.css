@@ -1,0 +1,28 @@
+/* Layout helpers used by all design pages. */
+.preview-notice { display:flex; align-items:center; gap:.75rem; margin:1rem 1.5rem 0; padding:.625rem 1rem; border-radius:.5rem; font-size:12px; background:rgb(var(--c-tertiary) / .12); color:rgb(var(--c-tertiary)); border:1px solid rgb(var(--c-tertiary) / .35); }
+.page-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1.25rem; }
+.page-actions { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.grid-two { display:grid; grid-template-columns:minmax(0,2fr) minmax(300px,1fr); gap:1rem; align-items:start; }
+@media (max-width:1100px) { .grid-two { grid-template-columns:1fr; } }
+.table-scroll { overflow-x:auto; }
+.form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:.5rem 1rem; }
+.panel-footer { display:flex; align-items:center; justify-content:flex-end; gap:.5rem; margin-top:1rem; }
+/* App shell helpers */
+.app-header { left:18rem !important; }
+.design-banner { position:fixed; bottom:0; left:18rem; right:0; z-index:35; background:rgb(var(--c-surface-container-lowest)) !important; }
+main { padding-bottom:3rem; min-width:0; }
+body { background:rgb(var(--c-surface)); color:rgb(var(--c-on-surface)); font-family:"Plus Jakarta Sans",sans-serif; }
+button:focus-visible,a:focus-visible { outline:2px solid rgb(var(--c-primary)); outline-offset:3px; }
+@media(max-width:1023px) {
+ .app-header { left:0 !important; padding-left:4.5rem; }
+ .app-header > div:first-child { display:none; }
+ .app-header { justify-content:flex-end; }
+ .app-header .ax-btn-danger { display:none; }
+ .design-banner { left:0; }
+ .ax-table { min-width:640px; }
+ .ax-card { min-width:0; }
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;}}
+
+.nav-active { background: rgb(var(--c-surface-container-high)) !important; color: rgb(var(--c-primary)) !important; font-weight: 600; }
+.nav-active .material-symbols-outlined { color: rgb(var(--c-primary)); }
