@@ -153,16 +153,24 @@ through the agent.
 - Passwords are hashed with argon2id. Parameters follow the current OWASP
   recommendation and are stored in the hash string so they can be raised later.
 - TOTP 2FA (RFC 6238) with 10 single-use recovery codes, stored hashed.
+  Enrolled accounts never receive a password-only session: login starts a
+  short-lived challenge that must be completed with a code or recovery code.
 - Secret entrance path: the installer generates a random 12-character path.
   Visiting it sets an entrance cookie. Unauthenticated requests without that
   cookie get `404`, so scanners cannot fingerprint the panel.
 - Login rate limits: 5 failures per username per 15 minutes locks the account
-  with backoff; 20 failures per IP per 15 minutes blocks the IP.
+  with backoff; 20 failures per IP per 15 minutes blocks the IP. The IP bucket
+  keys on the TCP peer address; behind a reverse proxy or NAT every client
+  shares one address, so a single noisy client can exhaust the shared budget.
+  A trusted-proxy configuration that honours `X-Forwarded-For` is a later
+  prerequisite — do not place the panel behind a proxy until it exists.
 - Sessions: 32 random bytes in cookie `axp_session` (`HttpOnly`, `Secure`,
   `SameSite=Strict`). The database stores only the SHA-256 hash. Idle timeout
   2 hours, absolute 24 hours, both configurable.
 - CSRF: state-changing requests must send `X-CSRF-Token` matching the session
-  token, and the `Origin` header must match the panel origin.
+  token, and the `Origin` header must match the panel origin. The token is
+  mirrored to the UI in a readable `axp_csrf` cookie (double-submit); session
+  and challenge cookies remain `HttpOnly`.
 - Sudo mode: the terminal, root-scope file access, firewall, SSH settings and
   security settings require re-authentication (password + TOTP) within the
   last 10 minutes. **DESIGN / NOT IMPLEMENTED:** enrollment/revocation,
@@ -455,12 +463,15 @@ Conventions:
 | `POST /auth/mfa/disable` | [sudo] |
 | `GET /auth/sessions`, `DELETE /auth/sessions/{id}` | |
 
-Implemented in this revision: `POST /auth/login`, `POST /auth/logout` and
-`GET /auth/me`, with argon2id password hashing, the failed-login lockout,
-idle/absolute session expiry, hashed session storage and CSRF enforcement on
-state-changing requests. The remaining Auth rows (MFA, reauth, password
-change, session listing) stay **DESIGN / NOT IMPLEMENTED**, as does the
-secret entrance path and the per-IP rate limit.
+Implemented in this revision: `POST /auth/login`, `POST /auth/login/mfa`,
+`POST /auth/logout`, `GET /auth/me`, `POST /auth/reauth`,
+`POST /auth/mfa/setup`, `POST /auth/mfa/enable` and `POST /auth/mfa/disable`,
+with argon2id password hashing, failed-login lockout, per-IP and per-username
+throttles, idle/absolute session expiry, hashed session and challenge storage,
+CSRF/Origin enforcement, TOTP replay blocking and hashed single-use recovery
+codes. Auth also stores encrypted pending TOTP secrets (§5.4). The remaining
+Auth rows (password change, session listing/revocation) stay
+**DESIGN / NOT IMPLEMENTED**, as does the secret entrance path.
 
 ### System
 

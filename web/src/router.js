@@ -11,7 +11,10 @@ import Files from './views/FilesView.vue'
 import Cron from './views/CronView.vue'
 import Login from './views/LoginView.vue'
 import Settings from './views/SettingsView.vue'
-export default createRouter({ history: createWebHashHistory(), routes: [
+import { session } from './auth/session.js'
+import { resolveGuard } from './auth/guards.js'
+import { isDesignPreview } from './designMode.js'
+const router = createRouter({ history: createWebHashHistory(), routes: [
   { path: '/', redirect: '/overview' },
   { path: '/overview', component: Overview },
   { path: '/websites', component: Websites },
@@ -27,3 +30,14 @@ export default createRouter({ history: createWebHashHistory(), routes: [
   { path: '/settings', component: Settings },
   { path: '/:pathMatch(.*)*', redirect: '/overview' },
 ] })
+
+// Production guard: protected views revalidate the HttpOnly session via /me on
+// every navigation, so an expired session redirects to sign-in. Fails closed.
+router.beforeEach(async (to) => {
+  const designPreview = isDesignPreview()
+  if (designPreview) return true
+  const status = to.path === '/login' ? await session.ensure() : await session.check()
+  return resolveGuard({ path: to.path, status, designPreview })
+})
+
+export default router

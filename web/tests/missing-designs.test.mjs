@@ -21,13 +21,6 @@ test('Settings saves tabbed preferences and simulates MFA/sessions', () => {
   p.revokeSession(p.sessions.value[1]); assert.equal(p.sessions.value.length, 2);
   p.toggles.digest = !p.toggles.digest; p.save(); assert.match(p.feedback.value, /Preview only/);
 });
-test('Login demonstrates two-stage password/TOTP without persisting credentials', () => {
-  const p = load('Login', 'stage,form,code,error,submitPassword,submitTotp,events');
-  p.form.username = 'admin@example.com'; p.form.password = ''; p.submitPassword(); assert.ok(p.error.value);
-  p.form.password = 'demo-password'; p.submitPassword(); assert.equal(p.stage.value, 'totp'); assert.equal(p.form.password, '');
-  p.code.value = '123'; p.submitTotp(); assert.ok(p.error.value);
-  p.code.value = '123456'; p.submitTotp(); assert.equal(p.stage.value, 'done'); assert.equal(p.code.value, ''); assert.deepEqual(p.events[0], ['signed-in']);
-});
 test('Cron validates schedules, creates examples and simulates run history', () => {
   const p = load('Cron', 'jobs,form,error,createJob,runJob,history,toggleJob');
   p.form.name = 'Example cleanup'; p.form.command = 'echo preview'; p.form.schedule = 'invalid'; p.createJob(); assert.ok(p.error.value);

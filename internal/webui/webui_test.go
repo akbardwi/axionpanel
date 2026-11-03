@@ -1,0 +1,106 @@
+package webui
+
+import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"testing/fstest"
+)
+
+func builtFS() fstest.MapFS {
+	return fstest.MapFS{
+		"index.html":           {Data: []byte("<!doctype html><title>AxionPanel</title>")},
+		"assets/index-abc.js":  {Data: []byte("console.log(1)")},
+		"assets/index-abc.css": {Data: []byte("body{}")},
+	}
+}
+
+func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+	return rec
+}
+
+func TestServesIndexAtRoot(t *testing.T) {
+	rec := get(t, Handler(builtFS()), "/")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET / = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "AxionPanel") {
+		t.Errorf("body = %q, want index.html", rec.Body)
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("index Cache-Control = %q, want no-cache so new builds load", cc)
+	}
+}
+
+func TestServesHashedAssetsImmutable(t *testing.T) {
+	rec := get(t, Handler(builtFS()), "/assets/index-abc.js")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("asset = %d, want 200", rec.Code)
+	}
+	if body, _ := io.ReadAll(rec.Body); string(body) != "console.log(1)" {
+		t.Errorf("asset body = %q", body)
+	}
+	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Errorf("asset Cache-Control = %q, want immutable (content-hashed names)", cc)
+	}
+}
+
+func TestUnknownPathIs404NotIndex(t *testing.T) {
+	// The UI uses hash routing, so there is no SPA fallback: unknown paths must
+	// not return index.html (which would mask typos in API paths).
+	for _, p := range []string{"/nope", "/assets/missing.js", "/api/v1/unknown"} {
+		if rec := get(t, Handler(builtFS()), p); rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", p, rec.Code)
+		}
+	}
+}
+
+func TestNoDirectoryListing(t *testing.T) {
+	if rec := get(t, Handler(builtFS()), "/assets/"); rec.Code != http.StatusNotFound {
+		t.Errorf("GET /assets/ = %d, want 404 (no listing)", rec.Code)
+	}
+}
+
+func TestMissingBuildIs503(t *testing.T) {
+	rec := get(t, Handler(fstest.MapFS{".gitkeep": {}}), "/")
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("GET / without a build = %d, want 503", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "make web") {
+		t.Errorf("body = %q, want build hint", rec.Body)
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
+	rec := get(t, SecurityHeaders(inner), "/anything")
+	want := map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"Referrer-Policy":        "same-origin",
+		"X-Frame-Options":        "DENY",
+	}
+	for k, v := range want {
+		if got := rec.Header().Get(k); got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
+	}
+	csp := rec.Header().Get("Content-Security-Policy")
+	for _, part := range []string{"default-src 'self'", "frame-ancestors 'none'", "object-src 'none'"} {
+		if !strings.Contains(csp, part) {
+			t.Errorf("CSP %q missing %q", csp, part)
+		}
+	}
+	// Only script-src matters for script injection; style-src 'unsafe-inline'
+	// is a deliberate tradeoff for the views' inline style attributes.
+	for _, directive := range strings.Split(csp, ";") {
+		directive = strings.TrimSpace(directive)
+		if strings.HasPrefix(directive, "script-src") && strings.Contains(directive, "unsafe") {
+			t.Errorf("CSP %q must not allow unsafe scripts", directive)
+		}
+	}
+}

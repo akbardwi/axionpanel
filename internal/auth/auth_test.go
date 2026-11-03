@@ -243,6 +243,7 @@ func TestLoginHandler(t *testing.T) {
 		mustExec(t, s, `UPDATE users SET password_hash = ? WHERE username = 'admin'`, hash)
 
 		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{"username":"admin","password":"sekret-1"}`))
+		req.Header.Set("Origin", testOrigin)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -258,8 +259,8 @@ func TestLoginHandler(t *testing.T) {
 		if cookie == nil {
 			t.Fatal("axp_session cookie must be set")
 		}
-		if !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
-			t.Errorf("cookie flags = %+v, want HttpOnly + SameSite=Strict", cookie)
+		if !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode {
+			t.Errorf("cookie flags = %+v, want HttpOnly + Secure + SameSite=Strict", cookie)
 		}
 		body := rec.Body.String()
 		if !strings.Contains(body, `"csrf_token"`) || !strings.Contains(body, `"mfa_required":false`) {
@@ -273,6 +274,7 @@ func TestLoginHandler(t *testing.T) {
 		mustExec(t, s, `UPDATE users SET password_hash = ? WHERE username = 'admin'`, hash)
 
 		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{"username":"admin","password":"nope"}`))
+		req.Header.Set("Origin", testOrigin)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusUnauthorized {
@@ -286,6 +288,7 @@ func TestLoginHandler(t *testing.T) {
 	t.Run("missing username is a 400", func(t *testing.T) {
 		mux, _, _, _ := newTestServer(t)
 		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{"password":"x"}`))
+		req.Header.Set("Origin", testOrigin)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusBadRequest {
@@ -318,6 +321,9 @@ func TestAuthAndCSRFMiddleware(t *testing.T) {
 		if withCookie {
 			req.AddCookie(cookie)
 		}
+		if method == "POST" {
+			req.Header.Set("Origin", testOrigin)
+		}
 		if csrf != "" {
 			req.Header.Set("X-CSRF-Token", csrf)
 		}
@@ -334,6 +340,9 @@ func TestAuthAndCSRFMiddleware(t *testing.T) {
 	}
 	if rec := do("POST", "/api/v1/auth/logout", "", true); rec.Code != http.StatusForbidden {
 		t.Errorf("POST without csrf = %d, want 403", rec.Code)
+	}
+	if rec := do("POST", "/api/v1/auth/logout", "wrong-token", true); rec.Code != http.StatusForbidden {
+		t.Errorf("POST with wrong csrf = %d, want 403", rec.Code)
 	}
 	if rec := do("POST", "/api/v1/auth/logout", sess.CSRFToken, true); rec.Code != http.StatusOK {
 		t.Errorf("POST with csrf = %d, want 200", rec.Code)

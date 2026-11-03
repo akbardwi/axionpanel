@@ -5,16 +5,25 @@ managing a local server and multiple enrolled hosts from one dashboard, with a
 path to multi-user hosting later. The license is still undecided; the project
 is not yet open source by definition.
 
-**Status: pre-alpha — scaffold and design, not a working management backend.**
-The repository has Go entrypoints (a panel health endpoint and an agent stub),
-a SQLite store, the initial migration and store constraint tests. The MVP
-features below are **DESIGN / NOT IMPLEMENTED**. Static UI references/prototypes
-are design artifacts with mock data, not evidence that their actions work.
-No new schema migrations or backend features are supplied by the scope update.
+**Status: pre-alpha — working authentication + embedded UI, design-only management features.**
 
-## MVP scope — DESIGN / NOT IMPLEMENTED
+The panel binary now serves the embedded Vue UI and a real authentication
+backend: password login, TOTP 2FA with single-use recovery codes, hashed
+sessions, sudo re-authentication, and CSRF/Origin enforcement (see
+`docs/spec.md` §5.1). Everything else — websites, databases, SSL, files, cron,
+containers, deploy, backups, multi-node — remains **DESIGN / NOT IMPLEMENTED**.
+The MVP features below are design contracts, not evidence that their actions
+work. Static UI references/prototypes are design artifacts with mock data.
 
-- Installer, authentication with TOTP 2FA, sessions, settings and audit
+## MVP scope
+
+Implemented:
+- Authentication: argon2id password hashing, TOTP 2FA + recovery codes, hashed
+  sessions with idle/absolute expiry, sudo mode, CSRF + Origin enforcement,
+  failed-login lockout and per-IP/per-username throttling.
+
+Design only (not implemented):
+- Installer, settings and audit
 - Host dashboard, live resource metrics, services, terminal and logs
 - Nginx websites (PHP-FPM, static, reverse proxy), Let's Encrypt/custom SSL
 - MariaDB-first native database/user management, file manager and cron
@@ -82,16 +91,20 @@ gates. Distributed scheduling/consensus/HA is not promised by the multi-node UI.
 ## Stack
 
 - Go: panel and agent binaries; initial store uses `modernc.org/sqlite`
-- Vue 3 + Vite + Tailwind: planned production UI embedded in the panel binary
+- Vue 3 + Vite + Tailwind: production UI embedded in the panel binary via
+  `go:embed`; hash routing, no SPA server-side fallback needed
 - SQLite: central MVP metadata; optional future PostgreSQL adapter
 
 ## Layout
 
 ```
-cmd/panel/     Panel entrypoint (currently health endpoint)
+cmd/panel/     Panel entrypoint (API server + embedded UI + auth)
 cmd/agent/     Agent entrypoint (currently stub)
-internal/      Store/migrations; planned API, services, validation and templates
-web/           Frontend workspace; static designs are not a wired SPA backend
+internal/      Store/migrations, auth, secret, totp, webui
+internal/secret/  AES-256-GCM envelope for encrypted fields
+internal/totp/    RFC 6238 TOTP with replay-step tracking
+internal/webui/   Static UI handler + security headers/CSP
+web/           Frontend workspace (Vue 3, embedded into the panel binary)
 docs/          Technical specification and design artifacts
 scripts/       Installer and packaging workspace
 ```
@@ -100,6 +113,66 @@ Design provenance, screen mapping and prototype guidance belong in
 [docs/design/README.md](docs/design/README.md); supplied references are under
 `docs/design/reference/`. New screens may be designed directly, with mock actions
 and unsupported capabilities clearly distinguished from implemented behavior.
+
+## Build and local smoke test
+
+Requires Go matching `go.mod`, Node.js 20.19+ or 22.12+, npm and make.
+This is a development setup, not an installer or production deployment.
+
+1. Build the frontend and binaries from the repository root:
+
+   ```sh
+   make web
+   make build
+   ```
+
+2. Create a private data directory and bootstrap the first administrator:
+
+   ```sh
+   install -d -m 700 ./data
+   ./bin/axionpanel -db ./data/panel.db -bootstrap-admin admin
+   ```
+
+   Save the generated password securely; it is printed once. Bootstrap refuses
+   to run when any user exists. Keep `data/secret.key` (0600) separate from DB
+   backups; losing it makes encrypted TOTP secrets unreadable. Existing keys
+   readable by group/others are rejected rather than silently replaced.
+
+3. Start a loopback-only development instance:
+
+   ```sh
+   ./bin/axionpanel -db ./data/panel.db \
+     -addr 127.0.0.1:7800 -origin http://127.0.0.1:7800 -insecure-loopback
+   ```
+
+   Open `http://127.0.0.1:7800/`, or use an SSH tunnel forwarding local port
+   7800 to server port 7800. `-insecure-loopback` disables Secure cookies only
+   for an explicit HTTP loopback origin. Do not use it for public access.
+   Native TLS, installer and trusted-proxy support are not implemented; peer-IP
+   rate limits are shared by clients behind a proxy/NAT. Setting `-origin` does
+   not enable TLS. Only auth is functional; host controls remain sample UI.
+
+MFA enrollment/disable and sudo have API endpoints but no wired settings UI yet.
+Password changes, session listing/revocation and audit writes remain pending.
+A clean checkout builds with a placeholder UI; without `make web`, `/` returns
+503 explaining how to build the frontend. Preview mode is explicit:
+`VITE_DESIGN_PREVIEW=true npm --prefix web run dev` (sign-in disabled).
+
+## Verification
+
+```sh
+go vet ./...
+go test -race -count=1 ./...
+npm --prefix web test
+cd web
+npx playwright test --config tests/auth.playwright.config.js
+npx playwright test
+```
+
+Auth browser contract tests mock API responses in tests only. Design tests start
+an isolated preview server and write screenshots to `docs/design/screens/`.
+Actual-binary browser smoke tests have also exercised password login, reload,
+TOTP/recovery login and logout; mocked tests alone do not prove integration.
 
 ## License
 

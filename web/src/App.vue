@@ -1,10 +1,28 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { session } from './auth/session.js'
+import { isDesignPreview } from './designMode.js'
 const route = useRoute()
+const router = useRouter()
+const preview = isDesignPreview()
 const dark = ref(true)
 const mobileOpen = ref(false)
+const signingOut = ref(false)
 watch(() => route.path, () => { mobileOpen.value = false })
+// Fail closed: any loss of the authenticated session (logout, expiry) leaves protected views.
+watch(() => session.state.status, (status) => {
+  if (!preview && status === 'unauthenticated' && route.path !== '/login') router.replace('/login')
+})
+const displayName = computed(() => session.state.user?.username || (preview ? 'preview' : ''))
+const displayRole = computed(() => session.state.user?.role || (preview ? 'Design preview' : ''))
+const initial = computed(() => (displayName.value[0] || '?').toUpperCase())
+async function signOut() {
+  if (signingOut.value) return
+  signingOut.value = true
+  try { await session.logout() } finally { signingOut.value = false }
+  router.replace('/login')
+}
 function toggleTheme() {
   dark.value = !dark.value
   document.documentElement.classList.toggle('dark', dark.value)
@@ -62,7 +80,7 @@ const nav = [
             style="background: transparent" active-class="nav-active">
             <span aria-hidden="true" class="material-symbols-outlined text-lg">{{ item.icon }}</span>{{ item.label }}
           </router-link>
-          <router-link to="/login" class="flex items-center gap-3 px-3 py-2 rounded-lg text-body-md text-on-surface-variant" active-class="nav-active">
+          <router-link v-if="preview" to="/login" class="flex items-center gap-3 px-3 py-2 rounded-lg text-body-md text-on-surface-variant" active-class="nav-active">
             <span aria-hidden="true" class="material-symbols-outlined text-lg">login</span>Sign in (preview)
           </router-link>
         </div>
@@ -80,7 +98,7 @@ const nav = [
           <div>Memory: <span class="text-on-surface">8 GB</span></div>
           <div class="text-right">Uptime: <span class="text-on-surface">42d</span></div>
         </div>
-        <p class="text-[10px] leading-4" style="color: rgb(var(--c-outline))">Design preview · example host data</p>
+        <p class="text-[10px] leading-4" style="color: rgb(var(--c-outline))">{{ preview ? 'Design preview' : 'Sample screen' }} · example host data</p>
       </div>
     </div>
   </aside>
@@ -96,25 +114,28 @@ const nav = [
       </button>
     </div>
     <div class="flex items-center gap-3">
-      <span class="ax-pill ax-pill-warn hidden md:inline-flex" title="No server operations are executed in this design preview.">DESIGN PREVIEW</span>
+      <span v-if="preview" class="ax-pill ax-pill-warn hidden md:inline-flex" title="No server operations are executed in this design preview.">DESIGN PREVIEW</span>
+      <span v-else class="ax-pill ax-pill-warn hidden md:inline-flex" title="Sign-in is real. Feature screens are non-functional samples; no server operations are executed.">SAMPLE SCREENS</span>
       <span class="ax-pill ax-pill-ok hidden lg:inline-flex"><span class="ax-dot ax-dot-ok"></span>Host link: Nominal</span>
       <button class="ax-btn ax-btn-ghost" title="Toggle theme" @click="toggleTheme">
         <span aria-hidden="true" class="material-symbols-outlined text-base">{{ dark ? 'light_mode' : 'dark_mode' }}</span>{{ dark ? 'Light' : 'Dark' }}
       </button>
-      <button class="ax-btn ax-btn-danger"><span aria-hidden="true" class="material-symbols-outlined text-base">power_settings_new</span>Reboot / Power</button>
+      <button class="ax-btn ax-btn-danger" title="Sample only — not connected"><span aria-hidden="true" class="material-symbols-outlined text-base">power_settings_new</span>Reboot / Power</button>
       <div class="flex items-center gap-2 pl-2">
         <div class="text-right hidden sm:block">
-          <p class="text-body-sm font-semibold text-on-surface leading-tight">admin</p>
-          <p class="ax-mono text-[10px] text-outline leading-tight">Administrator</p>
+          <p class="text-body-sm font-semibold text-on-surface leading-tight" data-testid="session-username">{{ displayName }}</p>
+          <p class="ax-mono text-[10px] text-outline leading-tight" data-testid="session-role">{{ displayRole }}</p>
         </div>
-        <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold" style="background: rgb(var(--c-primary) / .15); color: rgb(var(--c-primary))">A</div>
+        <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold" aria-hidden="true" style="background: rgb(var(--c-primary) / .15); color: rgb(var(--c-primary))">{{ initial }}</div>
       </div>
+      <button v-if="!preview" class="ax-btn ax-btn-ghost" :disabled="signingOut" @click="signOut"><span aria-hidden="true" class="material-symbols-outlined text-base">logout</span>{{ signingOut ? 'Signing out…' : 'Sign out' }}</button>
     </div>
   </header>
 
   <div :class="isLogin ? '' : 'lg:pl-72'">
     <div class="design-banner px-6 py-2 text-[11px] border-b" :style="{ background: 'rgb(var(--c-surface-container-lowest) / .5)', borderColor: 'rgb(var(--c-outline-variant) / .2)', color: 'rgb(var(--c-outline))' }" v-if="!isLogin">
-      Design preview — no server operations are executed. All values are example data.
+      <template v-if="preview">Design preview — no server operations are executed. All values are example data.</template>
+      <template v-else>Sample screens — you are signed in, but these feature screens are non-functional samples. No server operations are executed. All values are example data.</template>
     </div>
     <router-view @signed-in="$router.push('/overview')" />
   </div>

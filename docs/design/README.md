@@ -2,9 +2,11 @@
 
 ## Status and source
 
-This is an interactive design preview, not a functioning server-control implementation.
-No terminal, firewall, enrollment, deploy, restore, or login request reaches a server.
-All resource values are example data. No credentials from the login preview are stored.
+Production builds use real password/MFA authentication and an embedded Go server.
+Host-control screens remain non-functional samples: no terminal, firewall,
+enrollment, deploy or restore operation reaches a server. Resource values are
+example data. Explicit design-preview builds bypass route authentication for
+visual review, but disable sign-in; never use them as production builds.
 
 The supplied Stitch export is preserved unchanged in `reference/` (5 HTML files,
 5 screenshots, 2 DESIGN.md files). The original branding is preserved only in those
@@ -41,28 +43,31 @@ New designs:
 3. SSL Certificates — validity/renewal state, HTTP-01 issuance and custom certificate import.
 4. File Manager — scoped folder navigation, file list and example text editor.
 5. Cron Jobs — schedule builder, command/user settings and example run history.
-6. Login — password then TOTP/recovery preview, no real authentication.
+6. Login — real password then conditional TOTP/recovery authentication.
 7. Settings — general/security/notifications, MFA/session settings, save feedback.
 8. Nodes — host inventory/enrollment/trust design added for expanded MVP.
 
-State for new resource forms stays in memory and is discarded on reload. Credentials
-are never persisted. Preview login is deliberately accessible without authentication;
-it is not an authentication mechanism and must not be used as one.
+State for sample resource forms stays in memory and is discarded on reload.
+Auth passwords/codes are cleared on submit and never persisted in web storage.
+Session/challenge cookies are HttpOnly; the readable CSRF cookie is not a session
+credential. Design preview requires exactly `VITE_DESIGN_PREVIEW=true`.
 
 ## Run and verify
 
 ```sh
 cd web
 npm ci
-npm run dev -- --host 127.0.0.1 --port 15173
+VITE_DESIGN_PREVIEW=true npm run dev -- --host 127.0.0.1 --port 15173
 npm run build
 npm test
 npx playwright install chromium
 npx playwright test
 ```
 
-Open `http://127.0.0.1:15173/`. Hash navigation allows the built artifact to run
-from a basic static server. The Go binary does not yet embed or serve this frontend.
+Open `http://127.0.0.1:15173/` for design preview. Production `npm run build`
+(without the preview environment variable) is embedded by `make build`. See the
+repository README for a loopback-only authenticated test setup. Vite proxies
+`/api` to port 7800; the backend `-origin` must equal the browser-facing Vite URL.
 Use SSH forwarding rather than publishing the Vite development server publicly.
 
 Browser verification screenshots are written into `screens/`. They are review
