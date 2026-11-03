@@ -18,6 +18,9 @@ work. Static UI references/prototypes are design artifacts with mock data.
 ## MVP scope
 
 Implemented:
+- Agent foundation: peer-UID-checked Unix socket, strict request validation and
+  three read-only operations (`system.info`, `system.stats`,
+  `capabilities.refresh`). No host mutation yet; see [docs/agent.md](docs/agent.md).
 - Authentication: argon2id password hashing, TOTP 2FA + recovery codes, hashed
   sessions with idle/absolute expiry, sudo mode, CSRF + Origin enforcement,
   failed-login lockout and per-IP/per-username throttling.
@@ -99,8 +102,8 @@ gates. Distributed scheduling/consensus/HA is not promised by the multi-node UI.
 
 ```
 cmd/panel/     Panel entrypoint (API server + embedded UI + auth)
-cmd/agent/     Agent entrypoint (currently stub)
-internal/      Store/migrations, auth, secret, totp, webui
+cmd/agent/     Agent entrypoint (Unix socket, read-only ops; see docs/agent.md)
+internal/      Store/migrations, auth, secret, totp, webui, agent
 internal/secret/  AES-256-GCM envelope for encrypted fields
 internal/totp/    RFC 6238 TOTP with replay-step tracking
 internal/webui/   Static UI handler + security headers/CSP

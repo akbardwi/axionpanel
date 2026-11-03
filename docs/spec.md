@@ -119,7 +119,10 @@ through the agent.
 - `axionpanel.service`: `User=axionpanel`, `NoNewPrivileges=yes`,
   `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`,
   `ReadWritePaths=/var/lib/axionpanel /var/log/axionpanel`
-- `axionpanel-agent.service`: runs as root, `RuntimeDirectory=axionpanel`
+- `axionpanel-agent.service`: runs as root, `RuntimeDirectory=axionpanel`,
+  `RuntimeDirectoryMode=0750`, `Group=axionpanel`, with
+  `--allow-uid axionpanel --socket-gid axionpanel`. The agent accepts this
+  root:axionpanel directory as-is and never chmods an existing directory.
 
 ## 4. Filesystem layout
 
@@ -284,6 +287,11 @@ mTLS in the MVP, bound to an operator-approved interface and restricted to panel
 network addresses. Never publish an unauthenticated agent listener.
 
 ### 6.1 Endpoints
+
+Implemented so far: `GET /v1/info` and `POST /v1/ops/{name}`, with the
+read-only operations `system.info`, `system.stats` and `capabilities.refresh`
+(see `docs/agent.md`). Every other row below is design, not a running endpoint;
+the agent catalog reports the actual registrations.
 
 | Method and path | Purpose |
 |---|---|
@@ -1043,7 +1051,7 @@ store migration/constraint test suite.
 |---|---|
 | M0 | workspace scaffold, initial SQLite store/migration and constraint tests (present); panel health endpoint; agent stub |
 | M1 | DESIGN / NOT IMPLEMENTED: auth (login, 2FA, sessions, CSRF, entrance path), settings, audit; expanded-schema migrations reviewed separately |
-| M2 | DESIGN / NOT IMPLEMENTED: local agent socket/peer credentials, registry, per-host capabilities, stats/services, durable jobs and reconciliation |
+| M2 | PARTIAL: local agent socket/peer credentials, closed registry and read-only info/stats/capability detection implemented (`docs/agent.md`). DESIGN / NOT IMPLEMENTED: panel client wiring, managed capabilities, services, durable jobs and reconciliation |
 | M3 | DESIGN / NOT IMPLEMENTED: sites, users, PHP-FPM, Nginx apply/test/rollback |
 | M4 | DESIGN / NOT IMPLEMENTED: SSL with lego |
 | M5 | DESIGN / NOT IMPLEMENTED: native MariaDB database management |
