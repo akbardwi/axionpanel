@@ -1,0 +1,12 @@
+# AxionPanel agent policy example (deny by default).
+#
+# Install as /etc/axionpanel/agent.toml with owner root and mode 0400.
+# An empty file is valid and is the safest starting point. It is only parsed
+# today: no mutating operation is registered yet, so the policy does not
+# enforce anything the read-only catalogue does not already deny. It is not a
+# guarantee against future capabilities; enforcement must be added with them.
+# Comments and blank lines are allowed; unknown keys are rejected at startup.
+#
+# allow_root_terminal = false
+# allow_root_files = false
+# allowed_services = []

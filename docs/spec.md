@@ -486,9 +486,24 @@ Auth rows (password change, session listing/revocation) stay
 | Endpoint | Notes |
 |---|---|
 | `GET /system/info`, `GET /system/stats` | |
+| `GET /system/agent` | agent connection probe: `{connected, reason}` |
 | `WS /ws/stats` | live metrics |
 | `GET /services` | |
 | `POST /services/{name}/{action}` | |
+
+Implemented in this revision: `GET /system/info`, `GET /system/stats` and
+`GET /system/agent`, local host only. They require a valid session (safe GETs,
+no CSRF token), proxy the agent's read-only `GET /v1/info` and
+`POST /v1/ops/system.stats` over the Unix socket named by the panel flag
+`-agent-socket` (default `/run/axionpanel/agent.sock`), and send
+`Axion-Actor` from the validated session's user ID, never from the browser.
+Responses are `Cache-Control: no-store`. An unreachable agent or a protocol,
+oversize (1 MiB) or malformed response yields `503 agent_unavailable`; agent
+4xx/501 codes pass through, agent 5xx collapse to `502 agent_error` with no
+internal detail; `GET /system/agent` answers `200 {connected:false}` instead.
+The Overview screen shows these values in a "Host data (live)" card above the
+static design sample. `WS /ws/stats`, services and multi-host selection stay
+**DESIGN / NOT IMPLEMENTED**.
 
 ### Sites and PHP
 
@@ -1051,7 +1066,7 @@ store migration/constraint test suite.
 |---|---|
 | M0 | workspace scaffold, initial SQLite store/migration and constraint tests (present); panel health endpoint; agent stub |
 | M1 | DESIGN / NOT IMPLEMENTED: auth (login, 2FA, sessions, CSRF, entrance path), settings, audit; expanded-schema migrations reviewed separately |
-| M2 | PARTIAL: local agent socket/peer credentials, closed registry and read-only info/stats/capability detection implemented (`docs/agent.md`). DESIGN / NOT IMPLEMENTED: panel client wiring, managed capabilities, services, durable jobs and reconciliation |
+| M2 | PARTIAL: local agent socket/peer credentials, closed registry and read-only info/stats/capability detection implemented (`docs/agent.md`); panel client and authenticated `GET /system/{info,stats,agent}` wired for the local host. DESIGN / NOT IMPLEMENTED: managed capabilities, services, durable jobs and reconciliation |
 | M3 | DESIGN / NOT IMPLEMENTED: sites, users, PHP-FPM, Nginx apply/test/rollback |
 | M4 | DESIGN / NOT IMPLEMENTED: SSL with lego |
 | M5 | DESIGN / NOT IMPLEMENTED: native MariaDB database management |

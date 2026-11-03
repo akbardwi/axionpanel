@@ -9,13 +9,19 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
+	"axionpanel/internal/agentclient"
 	"axionpanel/internal/auth"
 	"axionpanel/internal/secret"
 	"axionpanel/internal/store"
+	"axionpanel/internal/systemapi"
 	"axionpanel/internal/webui"
 	"axionpanel/web"
 )
@@ -28,6 +34,7 @@ func main() {
 	keyPath := flag.String("secret-key", "", "secret key file for encrypted fields (default: secret.key next to -db)")
 	origin := flag.String("origin", auth.DefaultConfig().Origin, "exact browser origin (scheme://host[:port]) allowed to call the API")
 	insecureLoopback := flag.Bool("insecure-loopback", false, "allow a plain-HTTP loopback -origin for local development (cookies lose Secure)")
+	agentSocket := flag.String("agent-socket", "/run/axionpanel/agent.sock", "local agent Unix socket (read-only host data)")
 	bootstrap := flag.String("bootstrap-admin", "", "create the first admin user with this username, print a generated password, and exit")
 	flag.Parse()
 
@@ -69,6 +76,7 @@ func main() {
 		fmt.Fprintf(w, `{"status":"ok","version":%q}`, version)
 	})
 	authSvc.Register(mux)
+	registerSystemRoutes(mux, authSvc, *agentSocket)
 	// Unknown /api/ paths must stay JSON 404s, not fall through to the UI.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -86,8 +94,48 @@ func main() {
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    64 << 10,
+		BaseContext:       func(net.Listener) context.Context { return context.WithoutCancel(context.Background()) },
 	}
-	log.Fatal(srv.ListenAndServe())
+
+	// SIGTERM/SIGINT drain in-flight requests and exit 0, so `systemctl stop`
+	// is not marked failed. Active handlers otherwise use the request context.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- srv.ListenAndServe() }()
+	select {
+	case err := <-serveErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("panel: %v", err)
+		}
+	case <-ctx.Done():
+		stop()
+		log.Printf("panel: shutting down")
+		drain, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(drain); err != nil {
+			log.Printf("panel: shutdown deadline exceeded; closing connections")
+			_ = srv.Close()
+		}
+	}
+}
+
+// registerSystemRoutes serves read-only host data from the local agent to
+// signed-in users. The actor header comes from the validated session, never
+// from the request, so the agent audit log names the real panel user.
+func registerSystemRoutes(mux *http.ServeMux, authSvc *auth.Service, socket string) {
+	client := agentclient.New(socket)
+	wrap := func(next http.Handler) http.Handler {
+		return authSvc.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sess := auth.SessionFrom(r.Context())
+			if sess == nil {
+				http.Error(w, `{"error":{"code":"unauthorized","message":"Sign in required."}}`, http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(agentclient.WithActor(r.Context(), sess.UserID)))
+		}))
+	}
+	(&systemapi.Handler{Client: client}).Register(mux, wrap)
 }
 
 // bootstrapAdmin creates the first administrator with a generated password,

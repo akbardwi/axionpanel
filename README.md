@@ -5,7 +5,7 @@ managing a local server and multiple enrolled hosts from one dashboard, with a
 path to multi-user hosting later. The license is still undecided; the project
 is not yet open source by definition.
 
-**Status: pre-alpha — working authentication + embedded UI, design-only management features.**
+**Status: pre-alpha — working authentication, embedded UI and read-only local host data; management features remain design-only.**
 
 The panel binary now serves the embedded Vue UI and a real authentication
 backend: password login, TOTP 2FA with single-use recovery codes, hashed
@@ -21,13 +21,18 @@ Implemented:
 - Agent foundation: peer-UID-checked Unix socket, strict request validation and
   three read-only operations (`system.info`, `system.stats`,
   `capabilities.refresh`). No host mutation yet; see [docs/agent.md](docs/agent.md).
+- Local host data in the panel: authenticated `GET /api/v1/system/{info,stats,agent}`
+  proxied to the agent socket (`-agent-socket`, default
+  `/run/axionpanel/agent.sock`); the Overview screen shows a live host-data
+  card above the static sample. Without a running agent it reports
+  `agent unavailable` instead of showing values.
 - Authentication: argon2id password hashing, TOTP 2FA + recovery codes, hashed
   sessions with idle/absolute expiry, sudo mode, CSRF + Origin enforcement,
   failed-login lockout and per-IP/per-username throttling.
 
 Design only (not implemented):
 - Installer, settings and audit
-- Host dashboard, live resource metrics, services, terminal and logs
+- Full host dashboard, streaming metrics, services, terminal and logs
 - Nginx websites (PHP-FPM, static, reverse proxy), Let's Encrypt/custom SSL
 - MariaDB-first native database/user management, file manager and cron
 - nftables firewall with confirm-or-revert, SSH settings/public-key management,
@@ -103,13 +108,15 @@ gates. Distributed scheduling/consensus/HA is not promised by the multi-node UI.
 ```
 cmd/panel/     Panel entrypoint (API server + embedded UI + auth)
 cmd/agent/     Agent entrypoint (Unix socket, read-only ops; see docs/agent.md)
-internal/      Store/migrations, auth, secret, totp, webui, agent
+internal/      Store/migrations, auth, secret, totp, webui, agent,
+               agentclient (panel→agent), systemapi (/api/v1/system/*)
 internal/secret/  AES-256-GCM envelope for encrypted fields
 internal/totp/    RFC 6238 TOTP with replay-step tracking
 internal/webui/   Static UI handler + security headers/CSP
 web/           Frontend workspace (Vue 3, embedded into the panel binary)
 docs/          Technical specification and design artifacts
-scripts/       Installer and packaging workspace
+deploy/systemd/  Unit, sysusers, tmpfiles and policy templates (not installed)
+scripts/       Package/build helpers and systemd template verification
 ```
 
 Design provenance, screen mapping and prototype guidance belong in
@@ -153,7 +160,12 @@ This is a development setup, not an installer or production deployment.
    for an explicit HTTP loopback origin. Do not use it for public access.
    Native TLS, installer and trusted-proxy support are not implemented; peer-IP
    rate limits are shared by clients behind a proxy/NAT. Setting `-origin` does
-   not enable TLS. Only auth is functional; host controls remain sample UI.
+   not enable TLS. Auth and the Overview "Host data (live)" card are functional;
+   every other host control remains sample UI. Without a running agent the card
+   reports `agent unavailable` instead of values. Point the panel at a local
+   agent with `-agent-socket /run/axionpanel/agent.sock` (the default); see
+   [docs/deployment.md](docs/deployment.md) for the systemd layout. These units
+   are templates only and were not installed or run under PID1.
 
 MFA enrollment/disable and sudo have API endpoints but no wired settings UI yet.
 Password changes, session listing/revocation and audit writes remain pending.
@@ -170,7 +182,13 @@ npm --prefix web test
 cd web
 npx playwright test --config tests/auth.playwright.config.js
 npx playwright test
+cd ..
+python3 scripts/verify-systemd.py
 ```
+
+`scripts/verify-systemd.py` checks the unit templates against the real CLI
+flags and runs `systemd-analyze verify` inside a disposable root. It never
+installs, starts or enables anything.
 
 Auth browser contract tests mock API responses in tests only. Design tests start
 an isolated preview server and write screenshots to `docs/design/screens/`.

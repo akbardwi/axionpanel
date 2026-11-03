@@ -1,0 +1,57 @@
+# Read-only foundation only. Review docs/deployment.md before installation.
+# Loopback plain HTTP sample for SSH-tunnel access. No TLS, no public exposure.
+[Unit]
+Description=AxionPanel control panel (loopback only)
+After=network.target axionpanel-agent.service
+Wants=axionpanel-agent.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+# No sd_notify. SIGTERM/SIGINT drain HTTP requests for up to 10 seconds.
+Type=simple
+User=axionpanel
+Group=axionpanel
+WorkingDirectory=/var/lib/axionpanel
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/local/axionpanel/bin/axionpanel \
+    -addr 127.0.0.1:7800 \
+    -origin http://127.0.0.1:7800 \
+    -insecure-loopback \
+    -db /var/lib/axionpanel/panel.db \
+    -secret-key /var/lib/axionpanel/secret.key \
+    -agent-socket /run/axionpanel/agent.sock
+StateDirectory=axionpanel
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=15s
+StandardOutput=journal
+StandardError=journal
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# /proc stays visible: the Go runtime inspects self, and stats pass through.
+
+[Install]
+WantedBy=multi-user.target

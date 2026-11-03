@@ -1,0 +1,58 @@
+# Read-only foundation only. Review docs/deployment.md before installation.
+[Unit]
+Description=AxionPanel read-only host agent
+After=local-fs.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+# Agent has no sd_notify support. Ordering is not socket readiness.
+Type=simple
+User=root
+Group=axionpanel
+WorkingDirectory=/
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/local/axionpanel/bin/axionpanel-agent \
+    -socket /run/axionpanel/agent.sock \
+    -allow-uid axionpanel \
+    -socket-gid axionpanel \
+    -policy /etc/axionpanel/agent.toml
+RuntimeDirectory=axionpanel
+RuntimeDirectoryMode=0750
+# Do not let systemd erase a stale/preexisting socket after failed startup.
+# Agent removes its own socket on graceful shutdown; crash cleanup is manual.
+RuntimeDirectoryPreserve=yes
+UMask=0077
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=15s
+StandardOutput=journal
+StandardError=journal
+
+# Socket ownership changes need CAP_CHOWN. No host mutation capability set.
+CapabilityBoundingSet=CAP_CHOWN
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Keep /proc visible: socket bind uses /proc/self/fd; info/stats read /proc.
+# RuntimeDirectory is systemd's only writable persistent-path exception.
+
+[Install]
+WantedBy=multi-user.target

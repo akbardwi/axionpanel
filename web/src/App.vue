@@ -115,8 +115,8 @@ const nav = [
     </div>
     <div class="flex items-center gap-3">
       <span v-if="preview" class="ax-pill ax-pill-warn hidden md:inline-flex" title="No server operations are executed in this design preview.">DESIGN PREVIEW</span>
-      <span v-else class="ax-pill ax-pill-warn hidden md:inline-flex" title="Sign-in is real. Feature screens are non-functional samples; no server operations are executed.">SAMPLE SCREENS</span>
-      <span class="ax-pill ax-pill-ok hidden lg:inline-flex"><span class="ax-dot ax-dot-ok"></span>Host link: Nominal</span>
+      <span v-else class="ax-pill ax-pill-warn hidden md:inline-flex" title="Sign-in is real. Host data (live) reads the local agent; other feature screens and controls are samples.">SAMPLE SCREENS</span>
+      <span class="ax-pill ax-pill-ok hidden lg:inline-flex"><span class="ax-dot ax-dot-ok"></span>Host link: example</span>
       <button class="ax-btn ax-btn-ghost" title="Toggle theme" @click="toggleTheme">
         <span aria-hidden="true" class="material-symbols-outlined text-base">{{ dark ? 'light_mode' : 'dark_mode' }}</span>{{ dark ? 'Light' : 'Dark' }}
       </button>
@@ -135,7 +135,7 @@ const nav = [
   <div :class="isLogin ? '' : 'lg:pl-72'">
     <div class="design-banner px-6 py-2 text-[11px] border-b" :style="{ background: 'rgb(var(--c-surface-container-lowest) / .5)', borderColor: 'rgb(var(--c-outline-variant) / .2)', color: 'rgb(var(--c-outline))' }" v-if="!isLogin">
       <template v-if="preview">Design preview — no server operations are executed. All values are example data.</template>
-      <template v-else>Sample screens — you are signed in, but these feature screens are non-functional samples. No server operations are executed. All values are example data.</template>
+      <template v-else>Host data (live) on Overview uses read-only values from the local agent. Sample screens and other controls use example data; no host changes are performed.</template>
     </div>
     <router-view @signed-in="$router.push('/overview')" />
   </div>

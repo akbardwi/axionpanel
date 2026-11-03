@@ -1,17 +1,79 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
+import { session } from '../auth/session.js'
+import { isDesignPreview } from '../designMode.js'
+import { loadHost, formatBytes, formatUptime, reasonText } from '../system/host.js'
 const notice = ref('')
+const preview = isDesignPreview()
+const host = ref(null)
+const loading = ref(false)
+async function refreshHost() {
+  if (preview) return
+  loading.value = true
+  try {
+    host.value = await loadHost(undefined, {
+      onUnauthorized: () => {
+        // A 401 means the HttpOnly session may have expired. Hide the previous
+        // agent values immediately, then revalidate through session.check().
+        host.value = null
+        return session.check()
+      },
+    })
+  } finally { loading.value = false }
+}
 function previewAction(event) {
   const target = event.target.closest('button, a, input[type=checkbox]')
   if (!target) return
   event.preventDefault()
   notice.value = 'Preview only — no command was sent to a server.'
 }
+const memUsedPct = computed(() => {
+  const s = host.value?.stats
+  if (!s || !s.mem_total_bytes) return null
+  return Math.round(((s.mem_total_bytes - s.mem_available_bytes) / s.mem_total_bytes) * 100)
+})
+onMounted(refreshHost)
 </script>
 <template>
+<!-- Live host data: real read-only agent values via the authenticated panel API. -->
+<section class="pt-16 px-gutter-lg">
+  <div class="rounded-xl border p-4 mb-2" style="background: rgb(var(--c-surface-container-low)); border-color: rgb(var(--c-outline-variant) / .3)">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <div class="flex items-center gap-2">
+        <span aria-hidden="true" class="material-symbols-outlined text-base" style="color: rgb(var(--c-primary))">monitoring</span>
+        <h2 class="font-headline-sm text-headline-sm text-on-surface">Host data (live)</h2>
+        <span v-if="preview" class="ax-pill ax-pill-warn">not loaded in design preview</span>
+        <span v-else-if="loading" class="ax-pill ax-pill-dim">loading…</span>
+        <span v-else-if="host?.connected" class="ax-pill ax-pill-ok">agent connected</span>
+        <span v-else class="ax-pill ax-pill-warn">agent unavailable</span>
+      </div>
+      <button v-if="!preview" class="ax-btn ax-btn-ghost" :disabled="loading" @click="refreshHost">
+        <span aria-hidden="true" class="material-symbols-outlined text-base">refresh</span>Refresh
+      </button>
+    </div>
+    <p v-if="preview" class="ax-mono text-xs text-outline mt-2">Design preview build: the panel API is not called. The sample below is illustrative only.</p>
+    <p v-else-if="host && !host.connected" class="text-body-sm mt-2" style="color: rgb(var(--c-tertiary))">
+      {{ reasonText[host.reason] || 'Host data is unavailable.' }} <span class="ax-mono text-[11px] text-outline">({{ host.reason }})</span>
+    </p>
+    <template v-else-if="host?.connected">
+      <dl class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 ax-mono text-xs">
+        <div><dt class="text-outline">hostname</dt><dd class="text-on-surface">{{ host.info.hostname || '—' }}</dd></div>
+        <div><dt class="text-outline">os</dt><dd class="text-on-surface">{{ host.info.os || '—' }}</dd></div>
+        <div><dt class="text-outline">kernel</dt><dd class="text-on-surface">{{ host.info.kernel || '—' }}</dd></div>
+        <div><dt class="text-outline">agent</dt><dd class="text-on-surface">{{ host.info.version || '—' }} · proto {{ host.info.protocol }}</dd></div>
+        <div><dt class="text-outline">load 1 / 5 / 15</dt><dd class="text-on-surface">{{ host.stats ? `${host.stats.load1} / ${host.stats.load5} / ${host.stats.load15}` : '—' }}</dd></div>
+        <div><dt class="text-outline">memory used</dt><dd class="text-on-surface">{{ memUsedPct === null ? '—' : memUsedPct + '%' }}<span v-if="host.stats" class="text-outline"> of {{ formatBytes(host.stats.mem_total_bytes) }}</span></dd></div>
+        <div><dt class="text-outline">memory free</dt><dd class="text-on-surface">{{ host.stats ? formatBytes(host.stats.mem_available_bytes) : '—' }}</dd></div>
+        <div><dt class="text-outline">uptime</dt><dd class="text-on-surface">{{ host.stats ? formatUptime(host.stats.uptime_seconds) : '—' }}</dd></div>
+      </dl>
+      <p v-if="host.statsReason" class="ax-mono text-[11px] mt-2" style="color: rgb(var(--c-tertiary))">stats unavailable: {{ host.statsReason }}</p>
+      <p class="ax-mono text-[11px] text-outline mt-2">Values above come from the local agent. Everything below is the static design sample with example data.</p>
+    </template>
+  </div>
+</section>
 <section @click="previewAction" @submit.prevent>
 <div v-if="notice" class="preview-notice" role="status">{{ notice }} <button class="ax-btn ax-btn-ghost" @click.stop="notice = ''">Dismiss</button></div>
-<main v-pre class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<main v-pre class="w-full pt-4 bg-surface min-h-screen"><div class="flex flex-col w-full">
 <!-- Sub-header Node Status Bar & Actions -->
 <section class="w-full bg-surface-container-low px-gutter-lg py-space-md">
 <div class="max-w-[1600px] mx-auto flex flex-col xl:flex-row xl:items-center justify-between gap-space-md">

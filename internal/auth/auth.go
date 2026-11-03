@@ -624,6 +624,13 @@ type ctxKey int
 
 const sessionCtxKey ctxKey = 0
 
+// SessionFrom returns the session attached by RequireAuth, or nil.
+func SessionFrom(ctx context.Context) *Session { return sessionFrom(ctx) }
+
+// RequireAuth admits only requests with a valid, unexpired session cookie.
+// It does not check CSRF; use it only for safe (GET) routes.
+func (s *Service) RequireAuth(next http.Handler) http.Handler { return s.requireAuth(next) }
+
 func sessionFrom(ctx context.Context) *Session {
 	sess, _ := ctx.Value(sessionCtxKey).(*Session)
 	return sess
