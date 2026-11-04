@@ -21,7 +21,10 @@ Change it in the same pull request as the code that changes the behavior.
 The MVP lets one administrator manage a local VPS and multiple enrolled hosts
 from one central web UI and one SQLite metadata database:
 
-- websites: Nginx with PHP-FPM, static sites, or reverse proxy
+- websites: Nginx or Apache with PHP-FPM, static sites, or reverse proxy;
+  explicit Nginx-frontend/Apache-backend coexistence profiles
+- managed-node HTTP/HTTPS load-balancer gateways and explicit backend groups
+  (**DESIGN / NOT IMPLEMENTED**, [extended plan](web-stack-and-catalog-plan.md))
 - Let's Encrypt and custom SSL certificates
 - MariaDB/MySQL databases and database users
 - file manager with upload, download, edit, archive and extract
@@ -41,12 +44,14 @@ from one central web UI and one SQLite metadata database:
   (**DESIGN / NOT IMPLEMENTED**, §9.13)
 
 Not in the MVP: multiple panel users/resellers, mail, DNS server, FTP, a public
-app marketplace, Apache/OpenLiteSpeed, RHEL-family distros, distributed workload
+app marketplace, OpenLiteSpeed, RHEL-family distros, distributed workload
 scheduling, Kubernetes/Swarm orchestration, live workload migration, distributed
 storage, Raft consensus, quorum-based leadership or control-plane HA.
 “Cluster” means managed-host grouping, not a distributed scheduler: deployments
 explicitly target one host and Compose runs on that host only. No automatic
-cross-host failover or replication is promised.
+cross-host workload failover or replication is promised. Explicit gateway
+backend selection/failure handling is a separate planned resource, not
+automatic workload migration or redundant gateway HA.
 
 Foundations required by this MVP:
 
@@ -76,8 +81,8 @@ screens can be designed directly; all mock data/actions must be marked as such.
   `/usr/local/CyberCP`, `/usr/local/hestia`)
 - the panel is independent of the hosting stack: installation, HTTPS and login
   must not require Nginx, Apache, PHP, Docker, Certbot or a database server.
-  Nginx is an optional managed hosting service, not a control-plane dependency;
-  Apache management remains outside the MVP
+  Nginx and Apache are optional managed hosting services, not control-plane
+  dependencies; both are in the expanded MVP plan
   ([installation plan](installation-plan.md))
 - minimum 1 vCPU and 512 MB RAM. Design target: panel and agent together stay
   under 60 MB RSS at idle. This is a target to measure, not a measured number.
@@ -766,9 +771,17 @@ to every site group so Nginx can read static files.
 Site users cannot read other sites because they are not members of other
 site groups.
 
-### 9.4 Nginx vhost
+### 9.4 Web-server adapters and Nginx vhost
 
-The template includes:
+**DESIGN / NOT IMPLEMENTED:** Nginx, Apache and explicit Nginx-frontend/Apache-
+backend profiles are in scope. The template below is the Nginx baseline, not an
+Apache template. Apache adapters, listener ownership, site schema extensions and
+managed-node HTTP load-balancer resources follow the
+[web stack and catalog plan](web-stack-and-catalog-plan.md). Shared-IP listeners
+must not conflict; switching profiles must not silently convert unmanaged
+configuration or interrupt the independent panel HTTPS listener.
+
+The Nginx template includes:
 
 - `listen 80`, plus `listen 443 ssl` with HTTP/2 when a certificate is bound
 - `server_name` and `root`
@@ -1093,13 +1106,14 @@ auth/navigation/lifecycle checks. It does not prove installer or mutation gates.
 | M2 | PARTIAL: local agent socket/peer credentials, deny-by-default policy, immutable operation catalog and read-only info/stats/metrics/capability detection implemented (`docs/agent.md`); authenticated `GET /api/v1/system/{info,stats,metrics,agent}` wired for the local host. DESIGN / NOT IMPLEMENTED: managed capabilities, services, durable jobs and reconciliation |
 | M2a | DESIGN / NOT IMPLEMENTED: standalone panel HTTPS for direct IP access, exact-origin config, initial-admin bootstrap file and secret entrance; no hosting-stack dependency |
 | M2b | DESIGN / NOT IMPLEMENTED: signed release packaging, clean-host installer, idempotent re-run, upgrade/recovery and uninstall boundaries ([installation plan](installation-plan.md)) |
-| M2c | DESIGN / NOT IMPLEMENTED: durable mutation audit/jobs, typed optional Nginx/PHP-FPM/MariaDB installation, Software/Services status and unmanaged-service boundaries |
-| M3 | DESIGN / NOT IMPLEMENTED: sites, users, PHP-FPM, Nginx apply/test/rollback, after a deliberately installed/managed web server |
+| M2c | DESIGN / NOT IMPLEMENTED: durable mutation audit/jobs, typed optional Nginx/Apache/PHP-FPM/MariaDB installation, Software/Services status, reviewed catalog and unmanaged-service boundaries |
+| M3 | DESIGN / NOT IMPLEMENTED: sites, users, PHP-FPM, Nginx/Apache adapters and explicit coexistence profiles, validate/apply/test/rollback after a deliberately installed/managed web server |
 | M4 | DESIGN / NOT IMPLEMENTED: SSL with lego |
 | M5 | DESIGN / NOT IMPLEMENTED: native MariaDB database management |
 | M6 | DESIGN / NOT IMPLEMENTED: file manager and uploads |
 | M7 | DESIGN / NOT IMPLEMENTED: cron, nftables, SSH settings/public keys, Fail2ban monitoring, terminal and logs |
 | M8 | DESIGN / NOT IMPLEMENTED: remote mTLS enrollment/rotation/revocation, host inventory/grouping, central SQLite multi-host routing, offline lifecycle |
+| M8a | DESIGN / NOT IMPLEMENTED: HTTP/HTTPS load-balancer gateway/backend resources on enrolled nodes; network/TLS trust, health/failure/drain tests; no gateway HA or workload replication |
 | M9 | DESIGN / NOT IMPLEMENTED: Docker/Compose lifecycle, volumes/networks, restrictions and verified firewall integration |
 | M10 | DESIGN / NOT IMPLEMENTED: isolated Git build/deploy, signed webhooks, immutable releases, health gates and rollback |
 | M11 | DESIGN / NOT IMPLEMENTED: reviewed one-click application catalog, versioned manifests, input/host preflight and partial-failure handling |

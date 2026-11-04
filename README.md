@@ -41,7 +41,8 @@ Design only (not implemented):
 - Installer, native panel HTTPS for direct-IP access, settings UI and audit viewer
   ([installation and provisioning plan](docs/installation-plan.md))
 - Full host dashboard, streaming metrics, services, terminal and logs
-- Nginx websites (PHP-FPM, static, reverse proxy), Let's Encrypt/custom SSL
+- Nginx/Apache websites (PHP-FPM, static, reverse proxy), explicit coexistence
+  profiles, Let's Encrypt/custom SSL
 - MariaDB-first native database/user management, file manager and cron
 - nftables firewall with confirm-or-revert, SSH settings/public-key management,
   and read-only Fail2ban monitoring
@@ -51,6 +52,8 @@ Design only (not implemented):
   immutable releases, health checks and rollback limits
 - Curated, versioned one-click application templates with capability/input
   preflight and explicit host selection; not a public app marketplace
+- Managed-node HTTP/HTTPS load-balancer gateways and backend groups
+  ([web stack and catalog plan](docs/web-stack-and-catalog-plan.md))
 - Multi-node inventory, grouping/cluster UI, per-host capability detection,
   expiring one-use enrollment, remote mTLS, rotation and revocation/offboarding
 - Encrypted local and S3-compatible manual/scheduled backups, consistent DB

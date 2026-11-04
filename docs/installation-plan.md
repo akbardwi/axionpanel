@@ -10,13 +10,14 @@ remain in [deployment.md](deployment.md).
 Keep Go + embedded Vue 3, a non-root panel, a root agent with a closed operation
 API, SQLite metadata, Ubuntu/Debian first, amd64/arm64, and a single administrator
 with local and later enrolled remote hosts. Keep all expanded-MVP workloads:
-Nginx websites and PHP-FPM, certificates, MariaDB-first database management,
+Nginx/Apache websites and PHP-FPM, certificates, MariaDB-first database management,
 files, cron, firewall/SSH, terminal/logs, Docker/Compose, Git deployment, curated
 templates, managed-host grouping, and encrypted local/S3 backup/restore.
 
-This changes dependency order, not MVP scope. Nginx is the first managed web
-server. Apache/OpenLiteSpeed remain outside the MVP; mentioning them as services
-the panel must not depend on does not add their management to scope. Multi-user
+This changes dependency order. Subsequent approved scope additions include
+Nginx/Apache adapters, explicit coexistence profiles and managed-node HTTP load
+balancing; see [the extended plan](web-stack-and-catalog-plan.md). OpenLiteSpeed
+remains outside the MVP. Multi-user
 hosting, DNS/mail/FTP, distributed scheduling/HA and the license remain subject
 to the existing scope boundaries; the license is still deferred.
 
@@ -114,7 +115,7 @@ software/setup screens designed to the same conventions.
 Provide Software/Services management before enabling website creation. Use a
 closed reviewed component/version catalog, OS-specific compatibility checks,
 explicit install confirmation and target host selection. Initial managed stack:
-Nginx, supported PHP-FPM versions and MariaDB; version/package-source choices must
+Nginx, Apache, supported PHP-FPM versions and MariaDB; version/package-source choices must
 be verified rather than assumed from the test host. Not all websites require
 PHP or a database: static/reverse-proxy sites must not force unrelated installs.
 Container/template dependencies are checked when those features are implemented.
@@ -137,7 +138,7 @@ JSON logs are not sufficient for these mutation operations.
 3. Build signed release packaging and an installer; verify clean-machine install
    without any hosting stack, rerun safety, failure handling, upgrade and recovery.
 4. Add durable jobs/audit and typed optional component provisioning.
-5. Implement real Websites against a deliberately installed/managed Nginx, with
+5. Implement real Websites against deliberately installed/managed Nginx/Apache, with
    validate/apply/rollback; continue all remaining original MVP features.
 
 Installer work moves ahead of Websites; final integrated release acceptance stays
