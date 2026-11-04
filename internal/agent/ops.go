@@ -33,23 +33,24 @@ func builtinOperations() []struct {
 	}
 }
 
-// RegisterBuiltins installs only implemented, read-only operations. The info
-// handler captures this registry, so its catalog includes actual registrations
-// without a global snapshot or a separate hardcoded alias list.
+// RegisterBuiltins installs only implemented, read-only operations. The builtin
+// info handler is bound to each server's catalog when the registry is snapped.
 func RegisterBuiltins(r *Registry) {
 	for _, entry := range builtinOperations() {
-		op := entry.op
-		if entry.name == "system.info" {
-			op = func(ctx context.Context, params Params, meta RequestMeta) (any, error) {
-				res, err := opSystemInfo(ctx, params, meta)
-				if err != nil {
-					return nil, err
-				}
-				res.(map[string]any)["operations"] = r.Names()
-				return res, nil
-			}
+		r.register(entry.name, entry.op, entry.name == "system.info", ReadOnly)
+	}
+}
+
+func systemInfoForCatalog(names []string) Operation {
+	return func(ctx context.Context, params Params, meta RequestMeta) (any, error) {
+		res, err := opSystemInfo(ctx, params, meta)
+		if err != nil {
+			return nil, err
 		}
-		r.Register(entry.name, op)
+		// Each response owns its slice; embedding callers cannot mutate the
+		// server's discovery catalog through a previous result.
+		res.(map[string]any)["operations"] = append([]string(nil), names...)
+		return res, nil
 	}
 }
 

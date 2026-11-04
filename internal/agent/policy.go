@@ -106,6 +106,26 @@ func LoadPolicy(path string) (Policy, error) {
 	return p, nil
 }
 
+// newPolicySnapshot deep-copies startup policy. Authorization always reads the
+// snapshot, never the caller-owned struct, so post-load mutation cannot widen
+// access and there is no reload path.
+func newPolicySnapshot(p Policy) Policy {
+	out := Policy{AllowRootTerminal: p.AllowRootTerminal, AllowRootFiles: p.AllowRootFiles}
+	if len(p.AllowedServices) > 0 {
+		out.AllowedServices = append([]string(nil), p.AllowedServices...)
+	}
+	return out
+}
+
+func (p Policy) serviceAllowed(target string) bool {
+	for _, allowed := range p.AllowedServices {
+		if allowed == target {
+			return true
+		}
+	}
+	return false
+}
+
 // readBoundedPolicy reads at most maxPolicyBytes+1 bytes so an oversized file
 // is rejected without ever allocating more than the bound.
 func readBoundedPolicy(f *os.File) ([]byte, error) {

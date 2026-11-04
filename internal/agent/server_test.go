@@ -86,7 +86,7 @@ func TestHandlerPreservesUnsupportedCode(t *testing.T) {
 	r := NewRegistry()
 	r.Register("test.unsupported", func(context.Context, Params, RequestMeta) (any, error) {
 		return nil, newOpError(ErrUnsupported, "operation unsupported", nil)
-	})
+	}, ReadOnly)
 	res, data := doReq(t, &Server{Registry: r}, "POST", "/v1/ops/test.unsupported", strings.NewReader(`{"params":{}}`), nil)
 	defer res.Body.Close()
 	var out errorEnvelope
@@ -101,7 +101,7 @@ func TestHandlerPreservesCapabilityUnavailableCode(t *testing.T) {
 	r := NewRegistry()
 	r.Register("test.capability", func(context.Context, Params, RequestMeta) (any, error) {
 		return nil, newOpError(ErrCapabilityUnavailable, "capability unavailable", map[string]string{"capability": "docker"})
-	})
+	}, ReadOnly)
 	res, data := doReq(t, &Server{Registry: r}, "POST", "/v1/ops/test.capability", strings.NewReader(`{"params":{}}`), nil)
 	defer res.Body.Close()
 	var out errorEnvelope
@@ -122,10 +122,11 @@ func TestHandlerSanitizesInternalErrors(t *testing.T) {
 					return nil, errors.New("SECRET /root/password")
 				case "operror":
 					return nil, newOpError(ErrInternal, "SECRET /root/password", map[string]string{"secret": "SECRET"})
+
 				default:
 					return make(chan int), nil
 				}
-			})
+			}, ReadOnly)
 			s := &Server{Registry: r}
 			res, data := doReq(t, s, "POST", "/v1/ops/test.fail", strings.NewReader(`{"params":{}}`), nil)
 			res.Body.Close()
@@ -153,7 +154,7 @@ func TestHandlerRejectsDuplicateParamsKeys(t *testing.T) {
 			r.Register("test.echo", func(context.Context, Params, RequestMeta) (any, error) {
 				called = true
 				return map[string]any{}, nil
-			})
+			}, ReadOnly)
 			res, data := doReq(t, &Server{Registry: r}, "POST", "/v1/ops/test.echo", strings.NewReader(body), nil)
 			res.Body.Close()
 			var out errorEnvelope
@@ -193,7 +194,7 @@ func TestRejectDuplicateJSONKeys(t *testing.T) {
 
 func TestHandlerAcceptsRepeatedKeysInDifferentObjects(t *testing.T) {
 	r := NewRegistry()
-	r.Register("test.echo", func(context.Context, Params, RequestMeta) (any, error) { return map[string]any{}, nil })
+	r.Register("test.echo", func(context.Context, Params, RequestMeta) (any, error) { return map[string]any{}, nil }, ReadOnly)
 	body := `{"params":{"a":{"id":1},"b":{"id":2},"l":[{"id":3},{"id":4}]}}`
 	res, data := doReq(t, &Server{Registry: r}, "POST", "/v1/ops/test.echo", strings.NewReader(body), nil)
 	res.Body.Close()

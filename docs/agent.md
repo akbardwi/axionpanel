@@ -9,9 +9,12 @@ implemented so far; the full protocol is specified in `docs/spec.md` §6.
 ## Status
 
 Implemented and tested: socket transport, peer-UID gate, strict request
-envelope, four read-only operations, and a host policy loader. Not yet
+envelope, four read-only operations, a host policy loader, central policy
+enforcement, and fixed-shape request audit records. Not yet
 implemented: any mutating operation, remote mTLS transport, jobs/stats/terminal
-endpoints, installer, and systemd unit.
+endpoints and an installer. Manual systemd templates and deployment checks
+are documented in [deployment.md](deployment.md). The local public test
+installation is not a cross-distribution sandbox certification.
 
 ## Threat model
 
@@ -132,11 +135,58 @@ struct fields case-insensitively, so `name` and `NAME` decode into the same
 field. The duplicate-key check catches exact repeats only. Before adding an
 operation with parameters, decode case-sensitively or validate against a schema.
 
-The policy is parsed and stored on the server, but no registered operation
-consults it yet because the catalogue is read-only. Deny-by-default currently
-comes from that read-only catalogue, not from policy evaluation. Before the
-first privileged operation is added, enforcement must live in one place so a
-new operation cannot forget to check it.
+### Enforcement
+
+Policy is enforced in one place: `Server.dispatch`, the canonical path shared by
+`/v1/info`, `/v1/ops/{name}` and the embedding `Registry.Run`. A handler cannot
+run without passing it.
+
+- Every registration carries exactly one permission at startup: `read_only`,
+  `root_terminal`, `root_files`, or `service:<target>`. Registering an unknown
+  permission, more than one permission, or an invalid service target panics at
+  startup. A registration with no permission is accepted but is denied at
+  execution (`forbidden_by_policy`), so an unclassified operation can never run.
+- `root_terminal` and `root_files` require the corresponding boolean in
+  `agent.toml`. Services require an exact, case-sensitive match against
+  `allowed_services`; no wildcard, suffix, prefix, path, shell or leading-dash
+  target is accepted, and the target is fixed at registration — request
+  parameters cannot select or widen it.
+- Policy and the operation catalog (handlers and permission metadata) are
+  copied once on first use and never reread. Later registrations cannot widen
+  a running server, and dispatch and audit use the same snapshot. There is no
+  remote reload.
+- Unknown operations stay `not_found` (404). A known but unclassified operation
+  is `forbidden_by_policy` (403).
+
+### Privileged operations are not enabled
+
+No mutating operation exists yet, and policy permission alone is not enough to
+run one. `Logger` is a best-effort journald writer with no success or error
+result, so it cannot prove that a mutation was durably audited before it
+executed. Until a checked durable sink exists, every policy-permitted
+non-`read_only` permission returns `unsupported` (501) and the handler is never
+called. Policy-denied requests still return `forbidden_by_policy` (403). Even
+when policy allows it, no privileged handler executes. This is fail-closed: a
+broken or panicking logger cannot silently permit a future mutation. No generic
+shell, file or service execution is auto-authorized.
+
+### Audit
+
+Each request that reaches the HTTP layer emits one JSON record through `Logger`:
+`event`, `outcome` (`success`/`failed`/`denied`), `operation`, `classification`,
+optional `target`, `request_id`, `actor`, kernel `peer_uid`, `duration_ms`, and a
+closed-set `error_code`. Operation and classification come from the startup
+registry, never from the request. Unknown names are logged as `unknown`.
+
+`peer_uid` is the `SO_PEERCRED` value on the accepted connection, not
+`-allow-uid`. `request_id` and `actor` are recorded only after header validation.
+Actor is panel-supplied audit context, never transport authentication or an
+authorization grant.
+Parameters, results, headers, bodies, paths and raw error text are never logged;
+handlers that panic or return invented error codes are logged as `internal`.
+Audit is a fixed-shape record, so a compromised panel cannot inject log fields.
+Because `Logger` has no error return, failed writes (for example a panicking
+sink) are recovered and cannot leak data, but they are not retried.
 
 ## Running for development
 

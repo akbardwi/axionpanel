@@ -15,7 +15,7 @@ func TestRegistryRunsRegisteredOperation(t *testing.T) {
 			return nil, err
 		}
 		return in.X, nil
-	})
+	}, ReadOnly)
 	got, err := r.Run(context.Background(), "test.echo", json.RawMessage(`{"x":42}`), RequestMeta{})
 	if err != nil {
 		t.Fatal(err)
@@ -42,13 +42,13 @@ func TestRegistryRejectsUnknownOperation(t *testing.T) {
 
 func TestRegistryRejectsDuplicateRegistration(t *testing.T) {
 	r := NewRegistry()
-	r.Register("test.a", func(context.Context, json.RawMessage, RequestMeta) (any, error) { return nil, nil })
+	r.Register("test.a", func(context.Context, json.RawMessage, RequestMeta) (any, error) { return nil, nil }, ReadOnly)
 	defer func() {
 		if recover() == nil {
 			t.Fatal("expected panic on duplicate registration")
 		}
 	}()
-	r.Register("test.a", func(context.Context, json.RawMessage, RequestMeta) (any, error) { return nil, nil })
+	r.Register("test.a", func(context.Context, json.RawMessage, RequestMeta) (any, error) { return nil, nil }, ReadOnly)
 }
 
 func TestRegistryRejectsNonCatalogName(t *testing.T) {
@@ -98,7 +98,7 @@ func TestDecodeParamsRejectsNonObject(t *testing.T) {
 
 func TestRegistryContainsOperationPanics(t *testing.T) {
 	r := NewRegistry()
-	r.Register("test.panic", func(context.Context, Params, RequestMeta) (any, error) { panic("SECRET") })
+	r.Register("test.panic", func(context.Context, Params, RequestMeta) (any, error) { panic("SECRET") }, ReadOnly)
 	got, err := r.Run(context.Background(), "test.panic", nil, RequestMeta{})
 	var oe *OpError
 	if got != nil || !errors.As(err, &oe) || oe.Code != ErrInternal || oe.Message != "unexpected failure" || oe.Details != nil {

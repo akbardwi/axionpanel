@@ -35,11 +35,14 @@ Do not run the panel or bootstrap command as root.
 
 The policy file may be empty; comments are also valid. It must be a regular,
 non-symlink file owned by the agent's effective UID (root here), with no group
-or world permission bits. **Policy is parsed only, not enforced yet.** Current
-deny-by-default behavior comes from the closed read-only operation registry,
-not policy evaluation. Empty policy does not itself disable future operations.
-Enforcement must accompany any future mutating operations. Today there is no
-generic exec, terminal, or host mutation operation: only `system.info`,
+or world permission bits. Policy is enforced on every operation through one
+canonical dispatch path: each registered operation carries a startup
+classification, and an unclassified operation is denied even if registered.
+`read_only` operations always run; `root_terminal`, `root_files`, and
+`service:*` operations are denied unless the matching policy key allows them.
+Today no generic exec, terminal, file, or host mutation operation is registered,
+so no policy setting can enable one; an allowed-but-unimplemented privileged
+operation returns `unsupported`, not a shell. Only `system.info`,
 `system.stats`, `system.metrics`, and `capabilities.refresh` are registered. Tool detection is
 PATH lookup only, never tool execution or permission to manage that tool.
 

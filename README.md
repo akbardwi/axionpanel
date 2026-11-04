@@ -29,10 +29,16 @@ Implemented:
   `unavailable` with a reason instead of showing sample values.
 - Authentication: argon2id password hashing, TOTP 2FA + recovery codes, hashed
   sessions with idle/absolute expiry, sudo mode, CSRF + Origin enforcement,
-  failed-login lockout and per-IP/per-username throttling.
+  failed-login lockout and per-IP/per-username throttling. Password rotation
+  via API requires fresh sudo and revokes all sessions.
+- Host policy: central deny-by-default classification for every agent operation;
+  no mutating handlers execute, even when policy permits their classification.
+- Security audit: typed durable SQLite events for auth state changes, with
+  transactional rollback on audit failure; separate best-effort JSON request
+  records from the read-only agent. See [audit coverage](internal/audit/README.md).
 
 Design only (not implemented):
-- Installer, settings and audit
+- Installer, settings UI and audit viewer
 - Full host dashboard, streaming metrics, services, terminal and logs
 - Nginx websites (PHP-FPM, static, reverse proxy), Let's Encrypt/custom SSL
 - MariaDB-first native database/user management, file manager and cron
@@ -162,9 +168,9 @@ This is a development setup, not an installer or production deployment.
    Native TLS and an installer are not implemented. Optional `-trusted-proxy`
    CIDRs enable client-IP handling behind a controlled reverse proxy; see
    [docs/public-access.md](docs/public-access.md) for the opt-in TLS setup.
-   Setting `-origin` does not enable TLS. Auth and the Overview "Host data (live)"
-   card are functional; every other host control remains sample UI.
-   Without a running agent the card reports `agent unavailable` instead of values.
+   Setting `-origin` does not enable TLS. Auth and the Overview's existing
+   resource cards display real host data; other host controls remain sample UI.
+   Without a running agent the cards report unavailable instead of values.
    Point the panel at a local agent with
    `-agent-socket /run/axionpanel/agent.sock` (the default); see
    [docs/deployment.md](docs/deployment.md) for the manual systemd templates.
@@ -172,7 +178,9 @@ This is a development setup, not an installer or production deployment.
    cross-distribution sandbox certification.
 
 MFA enrollment/disable and sudo have API endpoints but no wired settings UI yet.
-Password changes, session listing/revocation and audit writes remain pending.
+Password change (API) is implemented; session listing/revocation UI and an
+audit viewer remain pending. The agent enforces host policy centrally but has
+no mutating operations; its request audit is best-effort journal logging.
 A clean checkout builds with a placeholder UI; without `make web`, `/` returns
 503 explaining how to build the frontend. Preview mode is explicit:
 `VITE_DESIGN_PREVIEW=true npm --prefix web run dev` (sign-in disabled).

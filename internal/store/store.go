@@ -20,6 +20,8 @@ var migrationFS embed.FS
 // connection gets them, not just the first one.
 var connectionPragmas = []string{
 	"foreign_keys(1)",
+	// REPLACE must fire audit_log's DELETE guard on every connection.
+	"recursive_triggers(1)",
 	"journal_mode(WAL)",
 	"busy_timeout(5000)",
 	"synchronous(NORMAL)",

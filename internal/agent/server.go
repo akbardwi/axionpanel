@@ -38,13 +38,15 @@ var Version = "0.1.0-dev"
 // with uid 0 is always rejected unless AllowRootPeer is set, so the zero value
 // of Server can never admit root.
 type Server struct {
-	Registry *Registry
-	// Policy is parsed host policy (spec §5.3). It is currently NOT enforced:
-	// no registered operation consults it. Deny-by-default today comes from the
-	// closed, read-only builtin catalog, not from this field. Operations that
-	// need policy decisions must read it explicitly when they are added.
-	Policy Policy
-	Socket string
+	// Registry and Policy are startup-only configuration. The first
+	// Handler/dispatch call snapshots both; later registrations cannot widen
+	// this server's catalog, and no API can reload or relax its policy.
+	Registry   *Registry
+	Policy     Policy
+	policyOnce sync.Once
+	policy     Policy
+	operations map[string]registeredOperation
+	Socket     string
 	// SocketGID owns the socket and its directory. Zero means the process
 	// effective GID; the CLI always requires an explicit panel group.
 	SocketGID  int
@@ -217,7 +219,8 @@ func (l *socketListener) Close() error {
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	handler := s.Handler()
 	srv := &http.Server{
-		Handler: handler,
+		Handler:     handler,
+		ConnContext: connContext,
 		// Handlers must not inherit signal cancellation: ctx stops the accept
 		// loop (via Shutdown below), while in-flight operations keep running
 		// until they finish or ShutdownTimeout forces srv.Close().
@@ -297,13 +300,14 @@ func (l *peerCheckedListener) Accept() (net.Conn, error) {
 			conn.Close()
 			continue
 		}
-		return conn, nil
+		return &peerConn{Conn: conn, uid: uid}, nil
 	}
 }
 
 // Handler returns the HTTP API. Header validation happens before routing so
 // every response carries a protocol-level error shape.
 func (s *Server) Handler() http.Handler {
+	s.policySnapshot()
 	return s.protocolMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		allowed := ""
 		if r.URL.Path == "/v1/info" {
@@ -332,6 +336,26 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) protocolMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now()
+		a := &requestAudit{record: auditRecord{Event: "agent.request", Operation: "unknown", Classification: "unclassified"}}
+		if uid, ok := peerUIDFromContext(r.Context()); ok {
+			a.record.PeerUID = &uid
+		}
+		r = r.WithContext(context.WithValue(r.Context(), auditContextKey{}, a))
+		aw := &auditResponse{ResponseWriter: w}
+		w = aw
+		defer func() {
+			a.record.DurationMS = time.Since(started).Milliseconds()
+			a.record.Outcome = "success"
+			if aw.code != "" {
+				a.record.Outcome = "failed"
+			}
+			if aw.code == ErrForbiddenByPolicy || aw.code == ErrNotFound || aw.code == ErrUnauthorized || aw.code == ErrUnsupported || aw.code == ErrCapabilityUnavailable {
+				a.record.Outcome = "denied"
+			}
+			a.record.Code = aw.code
+			s.auditEvent(a.record)
+		}()
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Axion-Protocol", strconv.Itoa(Protocol))
@@ -340,7 +364,7 @@ func (s *Server) protocolMiddleware(next http.Handler) http.Handler {
 
 		defer func() {
 			if rec := recover(); rec != nil {
-				s.logf("agent: recovered panic while handling %s %s: %v", r.Method, r.URL.Path, rec)
+				// Panic data, method and paths are never logged.
 				writeError(w, newOpError(ErrInternal, "unexpected failure", nil))
 			}
 		}()
@@ -348,6 +372,10 @@ func (s *Server) protocolMiddleware(next http.Handler) http.Handler {
 		if err := validateAxionHeaders(r.Header); err != nil {
 			writeError(w, err)
 			return
+		}
+		if a, ok := r.Context().Value(auditContextKey{}).(*requestAudit); ok {
+			a.record.RequestID = r.Header.Get("Axion-Request-ID")
+			a.record.Actor = r.Header.Get("Axion-Actor")
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -431,15 +459,74 @@ func validateRequestID(vals []string) error {
 }
 
 func (s *Server) requestMeta(r *http.Request) RequestMeta {
-	return RequestMeta{
-		RequestID: r.Header.Get("Axion-Request-ID"),
-		Actor:     r.Header.Get("Axion-Actor"),
-		PeerUID:   s.AllowedUID,
+	return RequestMeta{RequestID: r.Header.Get("Axion-Request-ID"), Actor: r.Header.Get("Axion-Actor"), PeerUID: actualPeerUID(r.Context())}
+}
+
+// dispatch is the canonical execution path for both HTTP endpoints. Registry.Run
+// uses this same path with deny-by-default policy, so it cannot bypass policy.
+func (s *Server) dispatch(ctx context.Context, name string, params Params, meta RequestMeta) (result any, err error) {
+	s.policySnapshot()
+	defer func() {
+		if recover() != nil {
+			result = nil
+			err = newOpError(ErrInternal, "unexpected failure", nil)
+		}
+	}()
+	op, ok := s.operations[name]
+	operationAudit(ctx, name, op.permission, ok)
+	if !ok {
+		return nil, newOpError(ErrNotFound, "operation is not in the agent catalog", nil)
+	}
+	if !op.permission.valid() || !s.policyAllows(op.permission) {
+		return nil, newOpError(ErrForbiddenByPolicy, "operation denied by host policy", nil)
+	}
+	// Logger is best-effort (no error return), not a durable mutation audit.
+	// Until a checked durable sink exists, privileged handlers never execute,
+	// even if host policy permits them. No generic shell is auto-authorized.
+	if op.permission != ReadOnly {
+		return nil, newOpError(ErrUnsupported, "privileged operations are not implemented", nil)
+	}
+	return op.handler(ctx, params, meta)
+}
+
+// noteOperation records the fixed startup classification before any request
+// body is parsed, so a malformed body still audits a trustworthy operation.
+func (s *Server) noteOperation(ctx context.Context, name string) {
+	s.policySnapshot()
+	op, ok := s.operations[name]
+	operationAudit(ctx, name, op.permission, ok)
+}
+
+func (s *Server) policyAllows(p Permission) bool {
+	policy := s.policySnapshot()
+	switch p {
+	case ReadOnly:
+		return true
+	case RootTerminal:
+		return policy.AllowRootTerminal
+	case RootFiles:
+		return policy.AllowRootFiles
+	default:
+		target, ok := strings.CutPrefix(string(p), "service:")
+		return ok && validServiceTarget(target) && policy.serviceAllowed(target)
 	}
 }
 
+// policySnapshot freezes host policy and the registry catalog. Both are
+// startup-only; calling it from every entry point makes the first call
+// authoritative and keeps dispatch and HTTP audit classification on one catalog.
+func (s *Server) policySnapshot() Policy {
+	s.policyOnce.Do(func() {
+		s.policy = newPolicySnapshot(s.Policy)
+		if s.Registry != nil {
+			s.operations = s.Registry.snapshot()
+		}
+	})
+	return s.policy
+}
+
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
-	res, err := s.Registry.Run(r.Context(), "system.info", nil, s.requestMeta(r))
+	res, err := s.dispatch(r.Context(), "system.info", nil, s.requestMeta(r))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -571,6 +658,7 @@ func walkJSONValue(dec *json.Decoder) error {
 
 func (s *Server) handleOp(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
+	s.noteOperation(r.Context(), name)
 	params, err := parseOpEnvelope(w, r)
 	if err != nil {
 		writeError(w, err)
@@ -578,7 +666,7 @@ func (s *Server) handleOp(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), opTimeout)
 	defer cancel()
-	res, err := s.Registry.Run(ctx, name, params, s.requestMeta(r))
+	res, err := s.dispatch(ctx, name, params, s.requestMeta(r))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -600,6 +688,9 @@ func writeError(w http.ResponseWriter, err error) {
 		oe = newOpError(ErrInternal, "unexpected failure", nil)
 		status = http.StatusInternalServerError
 	}
+	if aw, ok := w.(*auditResponse); ok {
+		aw.setErrorCode(oe.Code)
+	}
 	env := errorEnvelope{}
 	env.set(oe)
 	writeJSON(w, status, env)
@@ -609,6 +700,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	buf, err := json.Marshal(v)
 	if err != nil {
 		status = http.StatusInternalServerError
+		if aw, ok := w.(*auditResponse); ok {
+			aw.setErrorCode(ErrInternal)
+		}
 		buf = []byte(`{"error":{"code":"internal","message":"unexpected failure"}}`)
 	}
 	w.Header().Set("Content-Type", "application/json")

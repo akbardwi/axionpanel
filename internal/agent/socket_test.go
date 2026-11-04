@@ -323,7 +323,7 @@ func TestServeAwaitsActiveHandlerBeforeReturning(t *testing.T) {
 		<-release
 		close(exited)
 		return "finished", nil
-	})
+	}, ReadOnly)
 	s := &Server{Socket: sock, Registry: r, AllowedUID: uint32(os.Geteuid()), AllowRootPeer: true, ShutdownTimeout: 2 * time.Second}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

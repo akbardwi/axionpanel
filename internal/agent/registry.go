@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strings"
 	"sync"
 )
 
@@ -31,20 +32,74 @@ type Operation func(ctx context.Context, params Params, meta RequestMeta) (any, 
 
 var opNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$`)
 
-// Registry maps operation names to handlers. Registration happens at startup
-// only; lookups are safe for concurrent use.
+// Registry maps operation names to handlers. Servers snapshot the catalog at
+// initialization; later registrations affect only future servers. Registration
+// and lookups are safe for concurrent use.
 type Registry struct {
 	mu  sync.RWMutex
-	ops map[string]Operation
+	ops map[string]registeredOperation
+}
+
+type Permission string
+
+const (
+	ReadOnly     Permission = "read_only"
+	RootTerminal Permission = "root_terminal"
+	RootFiles    Permission = "root_files"
+)
+
+// Service binds a future operation to one exact startup-selected service.
+// Request parameters never select or broaden this permission.
+func Service(target string) Permission { return Permission("service:" + target) }
+
+func (p Permission) valid() bool {
+	if p == ReadOnly || p == RootTerminal || p == RootFiles {
+		return true
+	}
+	target, ok := strings.CutPrefix(string(p), "service:")
+	return ok && validServiceTarget(target)
+}
+
+func validServiceTarget(target string) bool {
+	if len(target) == 0 || len(target) > 64 || !((target[0] >= 'a' && target[0] <= 'z') || (target[0] >= 'A' && target[0] <= 'Z') || (target[0] >= '0' && target[0] <= '9')) {
+		return false
+	}
+	for _, c := range target {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '@' || c == ':' || c == '#' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+type registeredOperation struct {
+	handler     Operation
+	permission  Permission
+	builtinInfo bool
 }
 
 func NewRegistry() *Registry {
-	return &Registry{ops: make(map[string]Operation)}
+	return &Registry{ops: make(map[string]registeredOperation)}
 }
 
 // Register adds an operation. Duplicate and malformed names panic because both
 // are programming errors discovered at startup, never request-driven.
-func (r *Registry) Register(name string, op Operation) {
+func (r *Registry) Register(name string, op Operation, permissions ...Permission) {
+	r.register(name, op, false, permissions...)
+}
+
+func (r *Registry) register(name string, op Operation, builtinInfo bool, permissions ...Permission) {
+	permission := Permission("")
+	if len(permissions) > 1 {
+		panic("agent: multiple permissions")
+	}
+	if len(permissions) == 1 {
+		permission = permissions[0]
+		if !permission.valid() {
+			panic("agent: unknown permission")
+		}
+	}
 	if !opNamePattern.MatchString(name) {
 		panic("agent: malformed operation name " + name)
 	}
@@ -56,7 +111,7 @@ func (r *Registry) Register(name string, op Operation) {
 	if _, dup := r.ops[name]; dup {
 		panic("agent: duplicate operation " + name)
 	}
-	r.ops[name] = op
+	r.ops[name] = registeredOperation{handler: op, permission: permission, builtinInfo: builtinInfo}
 }
 
 func (r *Registry) Has(name string) bool {
@@ -78,22 +133,40 @@ func (r *Registry) Names() []string {
 	return out
 }
 
-// Run dispatches to a registered operation. Anything absent from the registry
-// is not_found, which also covers attempts at path or shell injection.
-func (r *Registry) Run(ctx context.Context, name string, params Params, meta RequestMeta) (result any, err error) {
-	defer func() {
-		if recover() != nil {
-			result = nil
-			err = newOpError(ErrInternal, "unexpected failure", nil)
-		}
-	}()
+// snapshot returns an immutable copy of the catalog. A server takes exactly one
+// during initialization, so registration after Handler/dispatch cannot widen a
+// live server's permissions or exchange a handler.
+func (r *Registry) snapshot() map[string]registeredOperation {
 	r.mu.RLock()
-	op, ok := r.ops[name]
-	r.mu.RUnlock()
-	if !ok {
-		return nil, newOpError(ErrNotFound, "operation is not in the agent catalog", map[string]string{"operation": name})
+	defer r.mu.RUnlock()
+	out := make(map[string]registeredOperation, len(r.ops))
+	names := make([]string, 0, len(r.ops))
+	for name, op := range r.ops {
+		out[name] = op
+		names = append(names, name)
 	}
-	return op(ctx, params, meta)
+	sortStrings(names)
+	for name, op := range out {
+		if op.builtinInfo {
+			op.handler = systemInfoForCatalog(names)
+			out[name] = op
+		}
+	}
+	return out
+}
+
+// lookup never executes handlers. All execution lives in Server.dispatch.
+func (r *Registry) lookup(name string) (registeredOperation, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	op, ok := r.ops[name]
+	return op, ok
+}
+
+// Run preserves the read-only embedding API, using the same canonical server
+// dispatch with deny-by-default host policy. It cannot authorize root access.
+func (r *Registry) Run(ctx context.Context, name string, params Params, meta RequestMeta) (any, error) {
+	return (&Server{Registry: r}).dispatch(ctx, name, params, meta)
 }
 
 // decodeParams decodes an operation's parameters, rejecting unknown fields and

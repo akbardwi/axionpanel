@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"axionpanel/internal/audit"
 	"axionpanel/internal/secret"
 	"golang.org/x/crypto/argon2"
 )
@@ -266,13 +267,17 @@ func (s *Service) userByUsername(ctx context.Context, name string) (*User, error
 // A failure is reserved before the Argon2 work (outside any DB transaction),
 // so concurrent guesses cannot overshoot the limits; success refunds it.
 func (s *Service) Authenticate(ctx context.Context, username, password, ip string) (*User, error) {
-	return s.authenticate(ctx, username, password, ip, true)
+	u, err := s.authenticate(ctx, username, password, ip, true)
+	if err != nil {
+		return nil, s.passwordRejection(ctx, username, ip, err)
+	}
+	return u, nil
 }
 
 // authenticate implements Authenticate. recordLogin=false is for in-session
 // re-verification (sudo): throttling is identical, but users.last_login_at
 // keeps the time of the real sign-in.
-func (s *Service) authenticate(ctx context.Context, username, password, ip string, recordLogin bool) (*User, error) {
+func (s *Service) verifyPassword(ctx context.Context, username, password, ip string) (*User, error) {
 	if len(username) > 128 || len(password) > maxPassword {
 		return nil, ErrInvalidCredentials
 	}
@@ -289,24 +294,27 @@ func (s *Service) authenticate(ctx context.Context, username, password, ip strin
 	if !valid || u == nil || u.Status != "active" {
 		return nil, ErrInvalidCredentials
 	}
+	return u, nil
+}
+
+func (s *Service) authenticate(ctx context.Context, username, password, ip string, recordLogin bool) (*User, error) {
+	u, err := s.verifyPassword(ctx, username, password, ip)
+	if err != nil {
+		return nil, err
+	}
 	now := s.now.Now()
 	tx, err := s.writeTx(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `DELETE FROM auth_throttle WHERE scope='username' AND key=?`, key); err != nil {
+	if err = s.passwordAccepted(ctx, tx, u, ip, recordLogin); err != nil {
 		return nil, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE auth_throttle SET failures=max(failures-1,0) WHERE scope='ip' AND key=?`, ipKey(ip)); err != nil {
-		return nil, err
-	}
-	touch := 0
 	if recordLogin {
-		touch = 1
-	}
-	if _, err = tx.ExecContext(ctx, `UPDATE users SET failed_logins=0,locked_until=NULL,last_login_at=CASE WHEN ?1 THEN ?2 ELSE last_login_at END,updated_at=?2 WHERE id=?3`, touch, fmtTime(now), u.ID); err != nil {
-		return nil, err
+		if err = s.securityEvent(ctx, tx, audit.PasswordVerify, audit.Success, u, "", ip, audit.Password); err != nil {
+			return nil, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
@@ -317,6 +325,36 @@ func (s *Service) authenticate(ctx context.Context, username, password, ip strin
 		u.LastLoginAt = &now
 	}
 	return u, nil
+}
+
+// passwordAccepted runs with the credential/session event transaction. The
+// pre-Argon2 reservation is intentionally independent to bound concurrent guesses.
+func (s *Service) passwordAccepted(ctx context.Context, tx *sql.Tx, u *User, ip string, recordLogin bool) error {
+	// Re-read the credential under the lock: a concurrent rotation between
+	// verifyPassword and this transaction must reject the now-stale password.
+	var current string
+	if err := tx.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id=?`, u.ID).Scan(&current); err != nil {
+		return err
+	}
+	if current != u.passwordHash {
+		return ErrInvalidCredentials
+	}
+	now := s.now.Now()
+	key := hashToken(strings.ToLower(u.Username))
+	if _, err := tx.ExecContext(ctx, `DELETE FROM auth_throttle WHERE scope='username' AND key=?`, key); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE auth_throttle SET failures=max(failures-1,0) WHERE scope='ip' AND key=?`, ipKey(ip)); err != nil {
+		return err
+	}
+	touch := 0
+	if recordLogin {
+		touch = 1
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET failed_logins=0,locked_until=NULL,last_login_at=CASE WHEN ?1 THEN ?2 ELSE last_login_at END,updated_at=?2 WHERE id=?3`, touch, fmtTime(now), u.ID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // reserveAttempt enforces IP, username and account limits and records one
@@ -433,12 +471,19 @@ func (s *Service) CreateSession(ctx context.Context, userID int64, ip, agent str
 	if err != nil {
 		return nil, err
 	}
+	u, err := s.userByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := s.writeTx(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 	if err = insertSession(ctx, tx, sess); err != nil {
+		return nil, err
+	}
+	if err = s.securityEvent(ctx, tx, audit.SessionCreate, audit.Success, u, "", ip, audit.Session); err != nil {
 		return nil, err
 	}
 	return sess, tx.Commit()
@@ -504,6 +549,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("mfa/setup", s.handleSetup, true)
 	post("mfa/enable", s.handleEnable, true)
 	post("mfa/disable", s.handleDisable, true)
+	post("password", s.handlePassword, true)
 	mux.Handle("GET /api/v1/auth/me", s.requireAuth(http.HandlerFunc(s.handleMe)))
 }
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
@@ -532,9 +578,9 @@ func (s *Service) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid_request", "Invalid username or password length.")
 		return
 	}
-	u, err := s.Authenticate(r.Context(), req.Username, req.Password, s.clientIP(r))
+	u, err := s.verifyPassword(r.Context(), req.Username, req.Password, s.clientIP(r))
 	if err != nil {
-		authError(w, err)
+		authError(w, s.passwordRejection(r.Context(), req.Username, s.clientIP(r), err))
 		return
 	}
 	if u.TOTPEnabled {
@@ -553,12 +599,25 @@ func (s *Service) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 401, "invalid_credentials", "Sign in again.")
 		return
 	}
+	if err = s.passwordAccepted(r.Context(), tx, u, s.clientIP(r), true); err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			writeError(w, 401, "invalid_credentials", "Sign in again.")
+		} else {
+			internalError(w)
+		}
+		return
+	}
+	loginAt := s.now.Now()
+	fresh.LastLoginAt = &loginAt
 	sess, err := s.newSession(u.ID, s.clientIP(r), r.UserAgent())
 	if err == nil {
 		err = insertSession(r.Context(), tx, sess)
 	}
 	if err == nil {
 		err = revokePresented(r.Context(), tx, r)
+	}
+	if err == nil {
+		err = s.securityEvent(r.Context(), tx, audit.Login, audit.Success, u, "", s.clientIP(r), audit.Password)
 	}
 	if err == nil {
 		err = tx.Commit()
@@ -607,7 +666,20 @@ func (s *Service) setCSRFCookie(w http.ResponseWriter, csrf string, expires time
 	http.SetCookie(w, &http.Cookie{Name: CSRFCookie, Value: csrf, Path: "/", HttpOnly: false, Secure: s.secureCookies(), SameSite: http.SameSiteStrictMode, Expires: expires, MaxAge: age})
 }
 func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
-	if err := s.DeleteSession(r.Context(), sessionFrom(r.Context()).TokenHash); err != nil {
+	sess := sessionFrom(r.Context())
+	ip := s.clientIP(r)
+	tx, err := s.writeTx(r.Context())
+	if err == nil {
+		defer tx.Rollback()
+		_, err = tx.ExecContext(r.Context(), `DELETE FROM sessions WHERE token_hash=?`, sess.TokenHash)
+	}
+	if err == nil {
+		err = s.securityEvent(r.Context(), tx, audit.Logout, audit.Success, &sess.User, "", ip, audit.Session)
+	}
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
 		internalError(w)
 		return
 	}

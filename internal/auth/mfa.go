@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"axionpanel/internal/audit"
 	"axionpanel/internal/totp"
 )
 
@@ -50,6 +51,15 @@ func (s *Service) startChallenge(w http.ResponseWriter, r *http.Request, u *User
 		return
 	}
 	defer tx.Rollback()
+	fresh, err := userQuery(r.Context(), tx, `SELECT`+userColumns+`FROM users WHERE id=?`, u.ID)
+	if err != nil {
+		internalError(w)
+		return
+	}
+	if fresh.Status != "active" || !fresh.TOTPEnabled {
+		writeError(w, 401, "invalid_credentials", "Sign in again.")
+		return
+	}
 	token, err := randomToken("axp_mfa_", 32)
 	if err != nil {
 		internalError(w)
@@ -76,6 +86,18 @@ func (s *Service) startChallenge(w http.ResponseWriter, r *http.Request, u *User
 	}
 	if _, err := tx.ExecContext(r.Context(), `INSERT INTO mfa_challenges(token_hash,csrf_token_hash,user_id,ip,user_agent,created_at,expires_at) VALUES(?,?,?,?,?,?,?)`,
 		hashToken(token), hashToken(csrf), u.ID, s.clientIP(r), bounded(r.UserAgent(), 512), fmtTime(now), fmtTime(now.Add(challengeTTL))); err != nil {
+		internalError(w)
+		return
+	}
+	if err := s.passwordAccepted(r.Context(), tx, u, s.clientIP(r), false); err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			writeError(w, 401, "invalid_credentials", "Sign in again.")
+		} else {
+			internalError(w)
+		}
+		return
+	}
+	if err := s.securityEvent(r.Context(), tx, audit.MFAChallenge, audit.Success, u, "", s.clientIP(r), audit.Password); err != nil {
 		internalError(w)
 		return
 	}
@@ -264,7 +286,25 @@ func (s *Service) handleMFA(w http.ResponseWriter, r *http.Request) {
 		authError(w, errUnavailable)
 		return
 	}
+	var factorUserID int64
+	if err := tx.QueryRowContext(r.Context(), `SELECT user_id FROM mfa_challenges WHERE token_hash=?`, hashToken(ch.Value)).Scan(&factorUserID); err != nil {
+		internalError(w)
+		return
+	}
+	factorUser, err := userQuery(r.Context(), tx, `SELECT`+userColumns+`FROM users WHERE id=?`, factorUserID)
+	if err != nil {
+		internalError(w)
+		return
+	}
+	method := audit.TOTP
+	if req.RecoveryCode != "" {
+		method = audit.Recovery
+	}
 	if s.throttled(r.Context(), tx, "ip", ipKey(s.clientIP(r)), s.cfg.IPFailureLimit) {
+		if auditErr := s.securityEvent(r.Context(), tx, audit.LoginMFA, audit.Denied, factorUser, "", s.clientIP(r), method); auditErr != nil || tx.Commit() != nil {
+			internalError(w)
+			return
+		}
 		authError(w, ErrRateLimited)
 		return
 	}
@@ -275,6 +315,14 @@ func (s *Service) handleMFA(w http.ResponseWriter, r *http.Request) {
 		// half-finished request never consumes a recovery code or TOTP step.
 		if !isAuthOutcome(err) {
 			authError(w, err)
+			return
+		}
+		outcome := audit.Failure
+		if errors.Is(err, ErrLockedOut) {
+			outcome = audit.Denied
+		}
+		if auditErr := s.securityEvent(r.Context(), tx, audit.LoginMFA, outcome, factorUser, "", s.clientIP(r), method); auditErr != nil {
+			internalError(w)
 			return
 		}
 		if commitErr := tx.Commit(); commitErr != nil {
@@ -295,6 +343,22 @@ func (s *Service) handleMFA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := revokePresented(r.Context(), tx, r); err != nil {
+		internalError(w)
+		return
+	}
+	loginAt := s.now.Now()
+	if _, err := tx.ExecContext(r.Context(), `UPDATE users SET last_login_at=? WHERE id=?`, fmtTime(loginAt), u.ID); err != nil {
+		internalError(w)
+		return
+	}
+	u.LastLoginAt = &loginAt
+	if req.RecoveryCode != "" {
+		if err := s.securityEvent(r.Context(), tx, audit.RecoveryCode, audit.Success, u, "", s.clientIP(r), audit.Recovery); err != nil {
+			internalError(w)
+			return
+		}
+	}
+	if err := s.securityEvent(r.Context(), tx, audit.LoginMFA, audit.Success, u, "", s.clientIP(r), method); err != nil {
 		internalError(w)
 		return
 	}
@@ -379,6 +443,7 @@ func (s *Service) handleReauth(w http.ResponseWriter, r *http.Request) {
 	// Re-verification is not a new sign-in: keep users.last_login_at.
 	u, err := s.authenticate(r.Context(), sess.User.Username, req.Password, s.clientIP(r), false)
 	if err != nil {
+		err = s.passwordRejection(r.Context(), sess.User.Username, s.clientIP(r), err)
 		if errors.Is(err, ErrInvalidCredentials) {
 			writeError(w, 403, "invalid_credentials", "Invalid credentials.")
 		} else {
@@ -425,6 +490,10 @@ func (s *Service) handleReauth(w http.ResponseWriter, r *http.Request) {
 	// or wrongly demand the factor.
 	if enabled {
 		if (req.Code == "") == (req.RecoveryCode == "") {
+			if auditErr := s.securityEvent(r.Context(), tx, audit.Reauth, audit.Denied, &sess.User, "", s.clientIP(r), audit.TOTP); auditErr != nil || tx.Commit() != nil {
+				internalError(w)
+				return
+			}
 			writeError(w, 403, "sudo_required", "Second factor required.")
 			return
 		}
@@ -433,6 +502,14 @@ func (s *Service) handleReauth(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if s.mfaLimited(r.Context(), tx, u.ID) {
+			method := audit.TOTP
+			if req.RecoveryCode != "" {
+				method = audit.Recovery
+			}
+			if auditErr := s.securityEvent(r.Context(), tx, audit.Reauth, audit.Denied, u, "", s.clientIP(r), method); auditErr != nil || tx.Commit() != nil {
+				internalError(w)
+				return
+			}
 			authError(w, ErrLockedOut)
 			return
 		}
@@ -452,6 +529,14 @@ func (s *Service) handleReauth(w http.ResponseWriter, r *http.Request) {
 			// Legitimate rejection: the guess burns one MFA failure and the
 			// write must persist before the verdict is sent.
 			if recErr := s.recordMFAFailure(r.Context(), tx, s.clientIP(r), u.ID); recErr != nil {
+				internalError(w)
+				return
+			}
+			factorMethod := audit.TOTP
+			if req.RecoveryCode != "" {
+				factorMethod = audit.Recovery
+			}
+			if auditErr := s.securityEvent(r.Context(), tx, audit.Reauth, audit.Failure, u, "", s.clientIP(r), factorMethod); auditErr != nil {
 				internalError(w)
 				return
 			}
@@ -483,6 +568,23 @@ func (s *Service) handleReauth(w http.ResponseWriter, r *http.Request) {
 	}
 	if n != 1 {
 		authError(w, ErrSessionNotFound)
+		return
+	}
+	if req.RecoveryCode != "" {
+		if err := s.securityEvent(r.Context(), tx, audit.RecoveryCode, audit.Success, u, "", s.clientIP(r), audit.Recovery); err != nil {
+			internalError(w)
+			return
+		}
+	}
+	reauthMethod := audit.Password
+	if enabled {
+		reauthMethod = audit.TOTP
+	}
+	if req.RecoveryCode != "" {
+		reauthMethod = audit.Recovery
+	}
+	if err := s.securityEvent(r.Context(), tx, audit.Reauth, audit.Success, u, "", s.clientIP(r), reauthMethod); err != nil {
+		internalError(w)
 		return
 	}
 	if err := tx.Commit(); err != nil {
@@ -522,6 +624,10 @@ func (s *Service) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(), `UPDATE users SET totp_pending_secret_enc=?,updated_at=? WHERE id=?`, enc, fmtTime(s.now.Now()), sess.UserID); err != nil {
+		internalError(w)
+		return
+	}
+	if err := s.securityEvent(r.Context(), tx, audit.MFASetup, audit.Success, &sess.User, "", s.clientIP(r), audit.Session); err != nil {
 		internalError(w)
 		return
 	}
@@ -571,7 +677,15 @@ func (s *Service) handleEnable(w http.ResponseWriter, r *http.Request) {
 	step, matched := totp.Match(sec, req.Code, s.now.Now(), totp.Default, 1)
 	if !matched {
 		// Enrollment guesses share the per-user MFA failure budget.
-		if err := s.recordMFAFailure(r.Context(), tx, s.clientIP(r), sess.UserID); err != nil || tx.Commit() != nil {
+		if err := s.recordMFAFailure(r.Context(), tx, s.clientIP(r), sess.UserID); err != nil {
+			internalError(w)
+			return
+		}
+		if err := s.securityEvent(r.Context(), tx, audit.MFAEnable, audit.Failure, &sess.User, "", s.clientIP(r), audit.TOTP); err != nil {
+			internalError(w)
+			return
+		}
+		if tx.Commit() != nil {
 			internalError(w)
 			return
 		}
@@ -597,6 +711,14 @@ func (s *Service) handleEnable(w http.ResponseWriter, r *http.Request) {
 	}
 	// The enrolling session proved the new factor just now.
 	if _, err := tx.ExecContext(r.Context(), `UPDATE sessions SET mfa_passed=1 WHERE id=?`, sess.ID); err != nil {
+		internalError(w)
+		return
+	}
+	if err := s.securityEvent(r.Context(), tx, audit.MFAEnable, audit.Success, &sess.User, "", s.clientIP(r), audit.TOTP); err != nil {
+		internalError(w)
+		return
+	}
+	if err := s.securityEvent(r.Context(), tx, audit.RecoveryCodes, audit.Success, &sess.User, "", s.clientIP(r), audit.Session); err != nil {
 		internalError(w)
 		return
 	}
@@ -654,6 +776,10 @@ func (s *Service) handleDisable(w http.ResponseWriter, r *http.Request) {
 			internalError(w)
 			return
 		}
+	}
+	if err := s.securityEvent(r.Context(), tx, audit.MFADisable, audit.Success, &sess.User, "", s.clientIP(r), audit.Session); err != nil {
+		internalError(w)
+		return
 	}
 	if err := tx.Commit(); err != nil {
 		internalError(w)

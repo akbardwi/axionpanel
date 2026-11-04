@@ -209,11 +209,18 @@ WebSocket upgrades require a valid session and a matching `Origin`.
   blocks `..` and symlink escapes. The agent derives the scope root from the
   system user's home directory; it never accepts a root path from the panel.
 - `agent.toml` holds policy the panel cannot change: `allow_root_terminal`,
-  `allow_root_files`, `allowed_services`. **DESIGN / NOT IMPLEMENTED:** add
+  `allow_root_files`, `allowed_services`. Every operation carries a startup
+  classification and is evaluated centrally; unclassified operations are
+  denied. No privileged operation is implemented yet: policy-permitted ones
+  still return `unsupported`. **DESIGN / NOT IMPLEMENTED:** add
   permitted managed users, container mount roots/security restrictions, build
   limits and explicit network target allowlists for Git, registries and S3.
   Panel requests cannot relax these host-local policies.
-- The agent writes its own append-only audit log, separate from the panel DB.
+- The agent writes fixed-shape JSON audit records (operation, classification,
+  outcome, error code, kernel peer UID, request ID, actor, duration) to its
+  log. No params, results, headers or raw error text are recorded. This is
+  best-effort journal logging, not a durable tamper-evident sink; the closed
+  read-only catalog, not audit durability, bounds what the agent can do.
 - Each subsystem (nginx, each PHP-FPM version, cron file, firewall) has its own
   lock, so concurrent operations cannot interleave config writes.
 - **DESIGN / NOT IMPLEMENTED:** locks also cover each managed stack/release,
