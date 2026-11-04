@@ -1,12 +1,13 @@
 # AxionPanel technical specification
 
-Status: draft v0.2, expanded MVP (Phase 1). Last updated 2026-11-02.
+Status: draft v0.3, expanded MVP (Phase 1). Last updated 2026-11-04.
 
 **Implementation boundary:** this is a design contract, not a feature inventory.
-The repository currently has Go entrypoints (panel health endpoint, agent stub),
-a SQLite store, the initial migration and store tests. Authentication,
-provisioning and the management features below are not wired into a working
-backend. All newly added contracts are **DESIGN / NOT IMPLEMENTED**, including
+The repository currently implements authentication/MFA/sudo, transactional auth
+audit, an embedded UI, authenticated read-only local telemetry, and a local agent
+with central policy enforcement and immutable operation discovery. Native panel
+TLS, the installer, provisioning and workload management remain unimplemented.
+The contracts below include **DESIGN / NOT IMPLEMENTED** features, including
 remote enrollment/mTLS, containers/Compose, Git deploy, curated templates,
 backup/restore, Fail2ban monitoring and SSH public-key management. The initial
 migration is unchanged; proposed schema additions are listed separately in §8.
@@ -73,6 +74,11 @@ screens can be designed directly; all mock data/actions must be marked as such.
 - a fresh server is recommended; the installer refuses to run when another
   control panel is detected (`/www/server/panel`, `/usr/local/cpanel`,
   `/usr/local/CyberCP`, `/usr/local/hestia`)
+- the panel is independent of the hosting stack: installation, HTTPS and login
+  must not require Nginx, Apache, PHP, Docker, Certbot or a database server.
+  Nginx is an optional managed hosting service, not a control-plane dependency;
+  Apache management remains outside the MVP
+  ([installation plan](installation-plan.md))
 - minimum 1 vCPU and 512 MB RAM. Design target: panel and agent together stay
   under 60 MB RSS at idle. This is a target to measure, not a measured number.
   Docker workloads, Git builds and backup staging need additional capacity;
@@ -132,6 +138,7 @@ through the agent.
 | `/etc/axionpanel/panel.toml` | root:axionpanel 0640 | listen address, TLS, paths |
 | `/etc/axionpanel/agent.toml` | root 0600 | agent policy the panel cannot change |
 | `/etc/axionpanel/secret.key` | axionpanel 0600 | AES-256-GCM key for `*_enc` columns |
+| `/etc/axionpanel/tls/` | root:axionpanel 0750; key 0640 | DESIGN / NOT IMPLEMENTED: panel TLS certificate/key, separate from site and enrollment keys; no API/UI exposure |
 | `/etc/axionpanel/ssl/<cert_id>/` | root 0700 | certificates and private keys |
 | `/etc/axionpanel/acme/` | root 0700 | ACME account keys |
 | `/var/lib/axionpanel/panel.db` | axionpanel 0600 | panel database (+ `-wal`, `-shm`) |
@@ -165,8 +172,9 @@ through the agent.
   with backoff; 20 failures per IP per 15 minutes blocks the IP. The IP bucket
   keys on the TCP peer address; behind a reverse proxy or NAT every client
   shares one address, so a single noisy client can exhaust the shared budget.
-  A trusted-proxy configuration that honours `X-Forwarded-For` is a later
-  prerequisite — do not place the panel behind a proxy until it exists.
+  A trusted-proxy configuration that honours `X-Forwarded-For` exists for the
+  current loopback Nginx deployment; a public reverse proxy remains optional,
+  never required for panel access.
 - Sessions: 32 random bytes in cookie `axp_session` (`HttpOnly`, `Secure`,
   `SameSite=Strict`). The database stores only the SHA-256 hash. Idle timeout
   2 hours, absolute 24 hours, both configurable.
@@ -184,9 +192,16 @@ through the agent.
 
 ### 5.2 Transport
 
-HTTPS only. The installer creates a self-signed certificate and prints its
-fingerprint; the admin can switch to a Let's Encrypt certificate for the panel
-hostname. HSTS is sent only with a trusted certificate. Every response carries
+HTTPS only, served by the panel itself; a managed web server is not a
+prerequisite. Planned initial address is `https://<server-ip>:8443` with a
+configurable port and an exact advertised origin. The installer creates a
+self-signed certificate containing the selected IP in its Subject Alternative
+Name and prints the fingerprint; self-signed encryption does not authenticate
+server identity by itself and browsers warn until trusted. Public plaintext HTTP
+login is not supported. The admin can later switch to a trusted certificate for a
+panel hostname. HSTS is sent only with a trusted certificate. The current public
+pre-alpha still uses loopback HTTP plus Nginx and is unchanged until native TLS
+is implemented, verified and explicitly migrated. Every response carries
 `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`,
 `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`.
 WebSocket upgrades require a valid session and a matching `Origin`.
@@ -1065,17 +1080,21 @@ SSH daemon settings remain a distinct tested confirm-or-revert change (§9.7).
   enrolled agents; no HA or consensus test claim follows from host grouping.
 
 These are required acceptance gates, not claims that CI, integration adapters or
-the associated feature tests already exist. Current executable coverage is the
-store migration/constraint test suite.
+the associated feature tests already exist. Current coverage includes auth,
+audit/store migrations, local agent/client/API policy and telemetry, and UI
+auth/navigation/lifecycle checks. It does not prove installer or mutation gates.
 
 ## 11. Milestones
 
 | Milestone | Scope |
 |---|---|
 | M0 | workspace scaffold, initial SQLite store/migration and constraint tests (present); panel health endpoint; agent stub |
-| M1 | DESIGN / NOT IMPLEMENTED: auth (login, 2FA, sessions, CSRF, entrance path), settings, audit; expanded-schema migrations reviewed separately |
-| M2 | PARTIAL: local agent socket/peer credentials, closed registry and read-only info/stats/capability detection implemented (`docs/agent.md`); panel client and authenticated `GET /system/{info,stats,agent}` wired for the local host. DESIGN / NOT IMPLEMENTED: managed capabilities, services, durable jobs and reconciliation |
-| M3 | DESIGN / NOT IMPLEMENTED: sites, users, PHP-FPM, Nginx apply/test/rollback |
+| M1 | PARTIAL: login, 2FA, sessions, CSRF, sudo, password rotation and transactional auth audit implemented. DESIGN / NOT IMPLEMENTED: entrance path, settings UI, audit viewer; expanded-schema migrations reviewed separately |
+| M2 | PARTIAL: local agent socket/peer credentials, deny-by-default policy, immutable operation catalog and read-only info/stats/metrics/capability detection implemented (`docs/agent.md`); authenticated `GET /api/v1/system/{info,stats,metrics,agent}` wired for the local host. DESIGN / NOT IMPLEMENTED: managed capabilities, services, durable jobs and reconciliation |
+| M2a | DESIGN / NOT IMPLEMENTED: standalone panel HTTPS for direct IP access, exact-origin config, initial-admin bootstrap file and secret entrance; no hosting-stack dependency |
+| M2b | DESIGN / NOT IMPLEMENTED: signed release packaging, clean-host installer, idempotent re-run, upgrade/recovery and uninstall boundaries ([installation plan](installation-plan.md)) |
+| M2c | DESIGN / NOT IMPLEMENTED: durable mutation audit/jobs, typed optional Nginx/PHP-FPM/MariaDB installation, Software/Services status and unmanaged-service boundaries |
+| M3 | DESIGN / NOT IMPLEMENTED: sites, users, PHP-FPM, Nginx apply/test/rollback, after a deliberately installed/managed web server |
 | M4 | DESIGN / NOT IMPLEMENTED: SSL with lego |
 | M5 | DESIGN / NOT IMPLEMENTED: native MariaDB database management |
 | M6 | DESIGN / NOT IMPLEMENTED: file manager and uploads |
@@ -1085,7 +1104,7 @@ store migration/constraint test suite.
 | M10 | DESIGN / NOT IMPLEMENTED: isolated Git build/deploy, signed webhooks, immutable releases, health gates and rollback |
 | M11 | DESIGN / NOT IMPLEMENTED: reviewed one-click application catalog, versioned manifests, input/host preflight and partial-failure handling |
 | M12 | DESIGN / NOT IMPLEMENTED: encrypted local/S3 backups, consistency adapters, key custody/recovery, retention, confirmed scoped restore and drills |
-| M13 | DESIGN / NOT IMPLEMENTED: integrated UI pass, installer, packaging, signed releases, full expanded-MVP acceptance gates, v0.1.0 |
+| M13 | DESIGN / NOT IMPLEMENTED: integrated UI pass, final installer/upgrade validation, packaging, signed releases, full expanded-MVP acceptance gates, v0.1.0 |
 
 No delivery estimates are assigned. Ordering expresses dependencies, not completed
 backend work; static screen work can proceed in parallel without changing status.

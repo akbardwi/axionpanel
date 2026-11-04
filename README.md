@@ -38,7 +38,8 @@ Implemented:
   records from the read-only agent. See [audit coverage](internal/audit/README.md).
 
 Design only (not implemented):
-- Installer, settings UI and audit viewer
+- Installer, native panel HTTPS for direct-IP access, settings UI and audit viewer
+  ([installation and provisioning plan](docs/installation-plan.md))
 - Full host dashboard, streaming metrics, services, terminal and logs
 - Nginx websites (PHP-FPM, static, reverse proxy), Let's Encrypt/custom SSL
 - MariaDB-first native database/user management, file manager and cron
