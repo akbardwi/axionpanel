@@ -37,6 +37,34 @@ function validStats(body) {
     body.mem_total_bytes > 0 && body.mem_available_bytes <= body.mem_total_bytes
 }
 
+// RFC3339 (seconds precision or finer) is required so the UI can stamp reads
+// honestly. Null resources are allowed only with a closed-set reason, and a
+// present resource must carry an empty reason — the API never half-reports.
+const isRFC3339 = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(v) && Number.isFinite(Date.parse(v))
+const isPct = v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100
+const isPosInt = v => Number.isInteger(v) && v > 0
+// Match the backend's sanitized resource reasons; arbitrary error text and
+// host paths must never pass as a valid unavailable resource.
+const validReason = (key, reason) => reason === 'read_failed' || reason === 'invalid_data' ||
+  (key === 'network' && reason === 'no_default_route')
+const resourceOk = (body, key, shape) => shape(body[key])
+  ? body[key + '_reason'] === ''
+  : body[key] === null && validReason(key, body[key + '_reason'])
+const isObj = v => Boolean(v) && typeof v === 'object' && !Array.isArray(v)
+const cpuShape = c => isObj(c) && isPct(c.usage_percent) && isPosInt(c.logical_cpus)
+const isByteCount = v => Number.isSafeInteger(v) && v >= 0
+const diskShape = d => isObj(d) && d.mount === '/' && isByteCount(d.total_bytes) && d.total_bytes > 0 &&
+  isByteCount(d.used_bytes) && isByteCount(d.available_bytes) && d.used_bytes <= d.total_bytes &&
+  d.available_bytes <= d.total_bytes - d.used_bytes
+const validInterface = name => typeof name === 'string' && name.length >= 1 && name.length <= 15 &&
+  !/[^A-Za-z0-9_.@-]/.test(name) && !['lo', '.', '..'].includes(name)
+const networkShape = n => isObj(n) && validInterface(n.interface) && isCount(n.rx_bytes_per_second) && isCount(n.tx_bytes_per_second)
+
+function validMetrics(body) {
+  return isObj(body) && isRFC3339(body.observed_at) &&
+    resourceOk(body, 'cpu', cpuShape) && resourceOk(body, 'disk', diskShape) && resourceOk(body, 'network', networkShape)
+}
+
 export async function loadHost(fetchFn = globalThis.fetch.bind(globalThis), { onUnauthorized = async () => {} } = {}) {
   async function unauthorized() {
     // Revalidate via session.check(), not expire(): its generation guard keeps
@@ -62,12 +90,23 @@ export async function loadHost(fetchFn = globalThis.fetch.bind(globalThis), { on
   }
   if (stats.status === 401) return unauthorized()
   if (stats.ok && !validStats(stats.body)) stats = { ok: false, reason: 'invalid_response' }
+
+  let metrics
+  try {
+    metrics = await getJSON(fetchFn, '/api/v1/system/metrics')
+  } catch {
+    metrics = { ok: false, reason: 'network' }
+  }
+  if (metrics.status === 401) return unauthorized()
+  if (metrics.ok && !validMetrics(metrics.body)) metrics = { ok: false, reason: 'invalid_response' }
   return {
     connected: true,
     reason: '',
     info: info.body,
     stats: stats.ok ? stats.body : null,
     statsReason: stats.ok ? '' : stats.reason,
+    metrics: metrics.ok ? metrics.body : null,
+    metricsReason: metrics.ok ? '' : metrics.reason,
   }
 }
 

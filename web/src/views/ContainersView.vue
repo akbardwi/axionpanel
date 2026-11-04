@@ -71,9 +71,9 @@ function previewAction(event) {
 <span class="font-headline-md text-headline-md font-semibold text-on-surface">1-Click Fast Application Blueprints</span>
 <span class="font-code-sm text-code-sm text-outline px-2 py-0.5 rounded bg-surface-container-highest">Curated Stacks</span>
 </div>
-<a class="font-code-sm text-code-sm text-primary hover:underline flex items-center gap-1" href="#">
-          Explore Hub Catalog (48+) <span aria-hidden="true" class="material-symbols-outlined text-sm">arrow_forward</span>
-</a>
+<span class="font-code-sm text-code-sm text-outline flex items-center gap-1" title="The catalog browser has no backend yet">
+          Hub catalog not available yet <span aria-hidden="true" class="material-symbols-outlined text-sm">info</span>
+        </span>
 </div>
 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-space-sm">
 <!-- Blueprint 1: PostgreSQL -->

@@ -1,8 +1,9 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { session } from './auth/session.js'
 import { isDesignPreview } from './designMode.js'
+import { formatBytes, formatUptime } from './system/host.js'
 const route = useRoute()
 const router = useRouter()
 const preview = isDesignPreview()
@@ -12,6 +13,7 @@ const signingOut = ref(false)
 watch(() => route.path, () => { mobileOpen.value = false })
 // Fail closed: any loss of the authenticated session (logout, expiry) leaves protected views.
 watch(() => session.state.status, (status) => {
+  if (status === 'unauthenticated') hostState.value = null
   if (!preview && status === 'unauthenticated' && route.path !== '/login') router.replace('/login')
 })
 const displayName = computed(() => session.state.user?.username || (preview ? 'preview' : ''))
@@ -27,6 +29,17 @@ function toggleTheme() {
   dark.value = !dark.value
   document.documentElement.classList.toggle('dark', dark.value)
 }
+// The sidebar mirrors the read-only agent data the Overview already loads. The
+// Overview broadcasts each result, so the shell never polls the agent twice.
+const hostState = ref(null)
+const hostLive = computed(() => Boolean(hostState.value?.connected))
+const hostName = computed(() => hostState.value?.info?.hostname || (preview ? 'preview node' : 'unavailable'))
+const hostOs = computed(() => hostState.value?.info?.os || (preview ? 'Design preview' : 'unavailable'))
+const hostRam = computed(() => (hostState.value?.stats ? formatBytes(hostState.value.stats.mem_total_bytes) : '—'))
+const hostUptime = computed(() => (hostState.value?.stats ? formatUptime(hostState.value.stats.uptime_seconds) : '—'))
+function readHost(event) { hostState.value = event.detail ?? null }
+onMounted(() => window.addEventListener('axp:host', readHost))
+onUnmounted(() => window.removeEventListener('axp:host', readHost))
 const isLogin = computed(() => route.path === '/login')
 const nav = [
   { to: '/overview', icon: 'dashboard', label: 'Overview & Metrics' },
@@ -62,12 +75,12 @@ const nav = [
       </div>
       <div class="p-3 border-b" style="border-color: rgb(var(--c-outline-variant) / .2)">
         <label class="ax-label block mb-1.5">Target server node</label>
-        <button class="w-full flex items-center justify-between p-2 rounded-lg text-left" style="background: rgb(var(--c-surface-container))">
+        <button disabled title="Node switching unavailable" class="w-full flex items-center justify-between p-2 rounded-lg text-left" style="background: rgb(var(--c-surface-container))">
           <div class="flex items-center gap-2 overflow-hidden">
-            <span class="ax-dot ax-dot-ok"></span>
+            <span class="ax-dot" :class="hostLive ? 'ax-dot-ok' : 'ax-dot-warn'"></span>
             <div class="truncate">
-              <p class="ax-mono text-xs text-on-surface truncate">node-01</p>
-              <p class="ax-mono text-[10px] text-outline truncate">203.0.113.10 · example</p>
+              <p class="ax-mono text-xs text-on-surface truncate">{{ hostName }}</p>
+              <p class="ax-mono text-[10px] text-outline truncate">{{ hostLive ? 'Local host · read-only' : 'Host unavailable' }}</p>
             </div>
           </div>
           <span aria-hidden="true" class="material-symbols-outlined text-sm text-outline">unfold_more</span>
@@ -90,15 +103,15 @@ const nav = [
       <div class="p-3 rounded-lg space-y-1.5" style="background: rgb(var(--c-surface-container))">
         <div class="flex items-center justify-between">
           <span class="ax-label">Host specs</span>
-          <span class="ax-pill ax-pill-ok"><span class="ax-dot ax-dot-ok"></span>ONLINE</span>
+          <span class="ax-pill" :class="hostLive ? 'ax-pill-ok' : 'ax-pill-dim'">{{ hostLive ? 'LIVE' : 'UNAVAILABLE' }}</span>
         </div>
         <div class="grid grid-cols-2 gap-x-2 gap-y-1 ax-mono text-[11px] text-on-surface-variant">
-          <div>OS: <span class="text-on-surface">Ubuntu 24.04</span></div>
-          <div class="text-right">vCPU: <span class="text-on-surface">4</span></div>
-          <div>Memory: <span class="text-on-surface">8 GB</span></div>
-          <div class="text-right">Uptime: <span class="text-on-surface">42d</span></div>
+          <div>OS: <span class="text-on-surface">{{ hostOs }}</span></div>
+          <div class="text-right">vCPU: <span class="text-on-surface">{{ hostState?.metrics?.cpu?.logical_cpus ?? '—' }}</span></div>
+          <div>Memory: <span class="text-on-surface">{{ hostRam }}</span></div>
+          <div class="text-right">Uptime: <span class="text-on-surface">{{ hostUptime }}</span></div>
         </div>
-        <p class="text-[10px] leading-4" style="color: rgb(var(--c-outline))">{{ preview ? 'Design preview' : 'Sample screen' }} · example host data</p>
+        <p class="text-[10px] leading-4" style="color: rgb(var(--c-outline))">{{ preview ? 'Design preview · no host reads' : 'Read-only snapshot from Overview' }}</p>
       </div>
     </div>
   </aside>
@@ -115,12 +128,12 @@ const nav = [
     </div>
     <div class="flex items-center gap-3">
       <span v-if="preview" class="ax-pill ax-pill-warn hidden md:inline-flex" title="No server operations are executed in this design preview.">DESIGN PREVIEW</span>
-      <span v-else class="ax-pill ax-pill-warn hidden md:inline-flex" title="Sign-in is real. Host data (live) reads the local agent; other feature screens and controls are samples.">SAMPLE SCREENS</span>
-      <span class="ax-pill ax-pill-ok hidden lg:inline-flex"><span class="ax-dot ax-dot-ok"></span>Host link: example</span>
+      <span v-else class="ax-pill ax-pill-warn hidden md:inline-flex" title="Sign-in is real. Overview metrics read the local agent; other feature screens and controls are samples.">SAMPLE SCREENS</span>
+      <span class="ax-pill hidden lg:inline-flex" :class="hostLive ? 'ax-pill-ok' : 'ax-pill-dim'">Host link: {{ hostLive ? 'live' : 'unavailable' }}</span>
       <button class="ax-btn ax-btn-ghost" title="Toggle theme" @click="toggleTheme">
         <span aria-hidden="true" class="material-symbols-outlined text-base">{{ dark ? 'light_mode' : 'dark_mode' }}</span>{{ dark ? 'Light' : 'Dark' }}
       </button>
-      <button class="ax-btn ax-btn-danger" title="Sample only — not connected"><span aria-hidden="true" class="material-symbols-outlined text-base">power_settings_new</span>Reboot / Power</button>
+      <button disabled class="ax-btn ax-btn-danger" title="Unavailable — no backend action exists"><span aria-hidden="true" class="material-symbols-outlined text-base">power_settings_new</span>Reboot / Power (unavailable)</button>
       <div class="flex items-center gap-2 pl-2">
         <div class="text-right hidden sm:block">
           <p class="text-body-sm font-semibold text-on-surface leading-tight" data-testid="session-username">{{ displayName }}</p>
@@ -135,7 +148,7 @@ const nav = [
   <div :class="isLogin ? '' : 'lg:pl-72'">
     <div class="design-banner px-6 py-2 text-[11px] border-b" :style="{ background: 'rgb(var(--c-surface-container-lowest) / .5)', borderColor: 'rgb(var(--c-outline-variant) / .2)', color: 'rgb(var(--c-outline))' }" v-if="!isLogin">
       <template v-if="preview">Design preview — no server operations are executed. All values are example data.</template>
-      <template v-else>Host data (live) on Overview uses read-only values from the local agent. Sample screens and other controls use example data; no host changes are performed.</template>
+      <template v-else>Live metrics on Overview use read-only values from the local agent. Sample screens and other controls use example data; no host changes are performed.</template>
     </div>
     <router-view @signed-in="$router.push('/overview')" />
   </div>

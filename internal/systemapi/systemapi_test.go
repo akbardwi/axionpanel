@@ -18,6 +18,7 @@ import (
 type fakeClient struct {
 	info    *agentclient.Info
 	stats   *agentclient.Stats
+	metrics *agentclient.Metrics
 	err     error
 	calls   int
 	lastCtx context.Context
@@ -33,6 +34,12 @@ func (f *fakeClient) Stats(ctx context.Context) (*agentclient.Stats, error) {
 	f.calls++
 	f.lastCtx = ctx
 	return f.stats, f.err
+}
+
+func (f *fakeClient) Metrics(ctx context.Context) (*agentclient.Metrics, error) {
+	f.calls++
+	f.lastCtx = ctx
+	return f.metrics, f.err
 }
 
 func newMux(t *testing.T, c Client) *http.ServeMux {
@@ -72,7 +79,7 @@ var authed = map[string]string{"X-Test-Auth": "1"}
 func TestRoutesRequireAuth(t *testing.T) {
 	c := &fakeClient{info: &agentclient.Info{Hostname: "node-01"}}
 	mux := newMux(t, c)
-	for _, path := range []string{"/api/v1/system/info", "/api/v1/system/stats", "/api/v1/system/agent"} {
+	for _, path := range []string{"/api/v1/system/info", "/api/v1/system/stats", "/api/v1/system/metrics", "/api/v1/system/agent"} {
 		rec, _ := get(t, mux, path, nil)
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("%s without auth = %d, want 401", path, rec.Code)
@@ -187,12 +194,79 @@ func TestStatusReportsConnected(t *testing.T) {
 }
 
 func TestWrongMethodIs405(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/info", strings.NewReader("{}"))
-	req.Header.Set("X-Test-Auth", "1")
+	for _, path := range []string{"/api/v1/system/info", "/api/v1/system/stats", "/api/v1/system/metrics", "/api/v1/system/agent"} {
+		for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
+			c := &fakeClient{}
+			req := httptest.NewRequest(method, path, strings.NewReader("{}"))
+			req.Header.Set("X-Test-Auth", "1")
+			rec := httptest.NewRecorder()
+			newMux(t, c).ServeHTTP(rec, req)
+			if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != "GET, HEAD" {
+				t.Fatalf("%s %s = %d Allow=%q, want 405 GET, HEAD", method, path, rec.Code, rec.Header().Get("Allow"))
+			}
+			if c.calls != 0 {
+				t.Fatalf("%s %s reached the agent", method, path)
+			}
+		}
+	}
+}
+
+func TestWrongMethodStillRequiresAuth(t *testing.T) {
+	c := &fakeClient{}
 	rec := httptest.NewRecorder()
-	newMux(t, &fakeClient{}).ServeHTTP(rec, req)
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("status = %d, want 405", rec.Code)
+	newMux(t, c).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/system/metrics", nil))
+	if rec.Code != http.StatusUnauthorized || c.calls != 0 {
+		t.Fatalf("unauthenticated POST = %d calls=%d, want 401 and no agent call", rec.Code, c.calls)
+	}
+}
+
+func TestMetricsReturnsContractDocument(t *testing.T) {
+	c := &fakeClient{metrics: &agentclient.Metrics{
+		CPU:           &agentclient.CPUMetrics{UsagePercent: 0, LogicalCPUs: 2},
+		Disk:          &agentclient.DiskMetrics{Mount: "/", TotalBytes: 1000, UsedBytes: 600, AvailableBytes: 300},
+		NetworkReason: "no_default_route",
+		ObservedAt:    "2026-11-04T12:00:00Z",
+	}}
+	rec, _ := get(t, newMux(t, c), "/api/v1/system/metrics", authed)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	want := `{"cpu":{"usage_percent":0,"logical_cpus":2},"cpu_reason":"","disk":{"mount":"/","total_bytes":1000,"used_bytes":600,"available_bytes":300},"disk_reason":"","network":null,"network_reason":"no_default_route","observed_at":"2026-11-04T12:00:00Z"}`
+	if got := strings.TrimSpace(rec.Body.String()); got != want {
+		t.Fatalf("body =\n%s\nwant\n%s", got, want)
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("metrics must not be cached")
+	}
+	if c.lastCtx == nil {
+		t.Fatal("request context not propagated")
+	}
+}
+
+func TestMetricsAgentFailuresAreSanitized(t *testing.T) {
+	cases := map[string]struct {
+		err  error
+		want int
+		code string
+	}{
+		"unavailable": {fmt.Errorf("%w: dial unix /run/axion/agent.sock", agentclient.ErrUnavailable), 503, "agent_unavailable"},
+		"malformed":   {fmt.Errorf("%w: invalid metrics cpu", agentclient.ErrInvalidResponse), 503, "agent_unavailable"},
+		"protocol":    {agentclient.ErrProtocol, 503, "agent_unavailable"},
+		"internal":    {&agentclient.Error{Code: "internal", Message: "open /proc/stat", Status: 500}, 502, "agent_error"},
+		"not found":   {&agentclient.Error{Code: "not_found", Message: "operation is not in the agent catalog", Status: 404}, 404, "not_found"},
+		"cancelled":   {fmt.Errorf("%w: context canceled", agentclient.ErrUnavailable), 503, "agent_unavailable"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			rec, body := get(t, newMux(t, &fakeClient{err: tc.err}), "/api/v1/system/metrics", authed)
+			errObj, _ := body["error"].(map[string]any)
+			if rec.Code != tc.want || errObj["code"] != tc.code {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if strings.Contains(rec.Body.String(), "/proc") || strings.Contains(rec.Body.String(), "/run/") {
+				t.Fatalf("leaks host detail: %s", rec.Body.String())
+			}
+		})
 	}
 }
 
@@ -239,5 +313,18 @@ func TestIntegrationWithRealAgent(t *testing.T) {
 	rec, body = get(t, mux, "/api/v1/system/stats", authed)
 	if rec.Code != http.StatusOK || body["uptime_seconds"] == nil {
 		t.Fatalf("stats status = %d body=%v", rec.Code, body)
+	}
+
+	rec, body = get(t, mux, "/api/v1/system/metrics", authed)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	for _, key := range []string{"cpu", "cpu_reason", "disk", "disk_reason", "network", "network_reason", "observed_at"} {
+		if _, ok := body[key]; !ok {
+			t.Fatalf("metrics missing %q: %v", key, body)
+		}
+	}
+	if body["cpu"] == nil || body["disk"] == nil {
+		t.Fatalf("real Linux host must report cpu and disk: %v", body)
 	}
 }

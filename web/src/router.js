@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import Overview from './views/OverviewView.vue'
 import Containers from './views/ContainersView.vue'
 import Security from './views/SecurityView.vue'
@@ -14,7 +14,7 @@ import Settings from './views/SettingsView.vue'
 import { session } from './auth/session.js'
 import { resolveGuard } from './auth/guards.js'
 import { isDesignPreview } from './designMode.js'
-const router = createRouter({ history: createWebHashHistory(), routes: [
+const router = createRouter({ history: createWebHistory(), routes: [
   { path: '/', redirect: '/overview' },
   { path: '/overview', component: Overview },
   { path: '/websites', component: Websites },

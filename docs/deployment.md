@@ -40,7 +40,7 @@ deny-by-default behavior comes from the closed read-only operation registry,
 not policy evaluation. Empty policy does not itself disable future operations.
 Enforcement must accompany any future mutating operations. Today there is no
 generic exec, terminal, or host mutation operation: only `system.info`,
-`system.stats`, and `capabilities.refresh` are registered. Tool detection is
+`system.stats`, `system.metrics`, and `capabilities.refresh` are registered. Tool detection is
 PATH lookup only, never tool execution or permission to manage that tool.
 
 ## Manual preparation (not performed by this guide)

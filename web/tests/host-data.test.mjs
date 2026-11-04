@@ -6,6 +6,13 @@ import { createSessionStore } from '../src/auth/session.js'
 const validInfo = { connected: true, hostname: 'node-01', os: 'Ubuntu 26.04', arch: 'amd64', kernel: '7.0.0', version: '0.1.0-dev', protocol: 1, detected_tools: {}, capabilities: {}, capability_revision: 'rev1', observed_at: '2026-11-03T10:00:00Z', operations: ['system.stats'] }
 const validStats = { load1: 0.5, load5: 0.4, load15: 0.3, mem_total_bytes: 1024, mem_available_bytes: 512, uptime_seconds: 90, observed_at: '2026-11-03T10:00:00Z' }
 
+const validMetrics = {
+  cpu: { usage_percent: 34.2, logical_cpus: 4 }, cpu_reason: '',
+  disk: { mount: '/', total_bytes: 160 * 1024 ** 3, used_bytes: 58 * 1024 ** 3, available_bytes: 102 * 1024 ** 3 }, disk_reason: '',
+  network: { interface: 'eth0', rx_bytes_per_second: 1024 * 1024, tx_bytes_per_second: 512 * 1024 }, network_reason: '',
+  observed_at: '2026-11-03T10:00:05Z',
+}
+
 function stubFetch(routes) {
   const calls = []
   const fn = async (url, opts) => {
@@ -31,7 +38,9 @@ test('loadHost returns info and stats from the panel API', async () => {
   assert.equal(host.connected, true)
   assert.equal(host.info.hostname, 'node-01')
   assert.equal(host.stats.load1, 0.5)
-  assert.equal(f.calls.length, 2)
+  assert.deepEqual(f.calls.map(c => c.url), ['/api/v1/system/info', '/api/v1/system/stats', '/api/v1/system/metrics'])
+  assert.equal(host.metrics, null)
+  assert.equal(host.metricsReason, 'network')
   assert.equal(f.calls[0].opts.credentials, 'same-origin')
 })
 
@@ -104,6 +113,7 @@ for (const [index, body] of malformedStats.entries()) {
     const f = stubFetch({
       '/api/v1/system/info': { status: 200, body: validInfo },
       '/api/v1/system/stats': { status: 200, body },
+      '/api/v1/system/metrics': { status: 200, body: validMetrics },
     })
     const host = await loadHost(f)
     assert.equal(host.connected, true)

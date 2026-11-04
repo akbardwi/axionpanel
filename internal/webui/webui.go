@@ -8,9 +8,28 @@ import (
 	"strings"
 )
 
-// Handler serves only files from the supplied build. Hash routing means no
-// index fallback is necessary. Directory listings and unknown API paths stay
-// unavailable. If no build exists, the root reports an actionable 503.
+// ClientRoutes are the vue-router paths that serve the app shell. The router
+// uses HTML5 history (real paths, no "#"), so a refresh or a pasted link on
+// one of these must return index.html. Anything else stays a 404 so typos and
+// API mistakes are not masked. Keep in sync with web/src/router.js (a test
+// enforces this).
+var ClientRoutes = []string{
+	"/overview", "/websites", "/databases", "/ssl", "/files", "/cron",
+	"/containers", "/security", "/terminal", "/nodes", "/login", "/settings",
+}
+
+func isClientRoute(p string) bool {
+	for _, route := range ClientRoutes {
+		if p == route {
+			return true
+		}
+	}
+	return false
+}
+
+// Handler serves only files from the supplied build, plus the app shell for
+// known client routes. Directory listings and unknown paths stay unavailable.
+// If no build exists, the root and client routes report an actionable 503.
 func Handler(build fs.FS) http.Handler {
 	files := http.FileServer(http.FS(build))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -19,13 +38,14 @@ func Handler(build fs.FS) http.Handler {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		shell := r.URL.Path == "/" || isClientRoute(r.URL.Path)
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
-		if name == "." || name == "" {
+		if shell {
 			name = "index.html"
 		}
 		info, err := fs.Stat(build, name)
 		if err != nil || info.IsDir() || strings.HasPrefix(name, ".") {
-			if name == "index.html" && r.URL.Path == "/" {
+			if shell {
 				http.Error(w, "UI build missing; run make web and rebuild the panel.", http.StatusServiceUnavailable)
 			} else {
 				http.NotFound(w, r)
@@ -36,6 +56,12 @@ func Handler(build fs.FS) http.Handler {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
 			w.Header().Set("Cache-Control", "no-cache")
+		}
+		if shell {
+			// FileServer would redirect "/index.html" to "/"; serve the shell
+			// content directly so the client URL is preserved.
+			http.ServeFileFS(w, r, build, "index.html")
+			return
 		}
 		files.ServeHTTP(w, r)
 	})

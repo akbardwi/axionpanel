@@ -47,6 +47,10 @@ func TestSystemRoutesRequireSessionAndAttributeActor(t *testing.T) {
 			io.WriteString(w, `{"protocol":1,"version":"test","hostname":"node-01","os":"Ubuntu 26.04","arch":"arm64","kernel":"7.0.0","detected_tools":{},"capabilities":{},"capability_revision":"test-revision","operations":["system.stats"],"observed_at":"2026-11-03T10:00:00Z"}`)
 			return
 		}
+		if r.URL.Path == "/v1/ops/system.metrics" {
+			io.WriteString(w, `{"result":{"cpu":{"usage_percent":12.5,"logical_cpus":2},"cpu_reason":"","disk":{"mount":"/","total_bytes":1000,"used_bytes":600,"available_bytes":300},"disk_reason":"","network":null,"network_reason":"no_default_route","observed_at":"2026-11-03T10:00:00Z"}}`)
+			return
+		}
 		io.WriteString(w, `{"result":{"load1":0.5,"load5":0.4,"load15":0.3,"mem_total_bytes":1024,"mem_available_bytes":512,"uptime_seconds":60,"observed_at":"2026-11-03T10:00:00Z"}}`)
 	})}
 	go func() { _ = agent.Serve(ln) }()
@@ -55,7 +59,7 @@ func TestSystemRoutesRequireSessionAndAttributeActor(t *testing.T) {
 	registerSystemRoutes(mux, svc, sock)
 	// Same broad API fallback as production must not hide method errors.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNotFound) })
-	for _, path := range []string{"/api/v1/system/info", "/api/v1/system/stats", "/api/v1/system/agent"} {
+	for _, path := range []string{"/api/v1/system/info", "/api/v1/system/stats", "/api/v1/system/metrics", "/api/v1/system/agent"} {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: sess.Token})
 		rec := httptest.NewRecorder()
@@ -64,7 +68,7 @@ func TestSystemRoutesRequireSessionAndAttributeActor(t *testing.T) {
 			t.Fatalf("%s wrong method = %d Allow=%q, want 405 GET, HEAD", path, rec.Code, rec.Header().Get("Allow"))
 		}
 	}
-	for _, path := range []string{"/api/v1/system/info", "/api/v1/system/stats", "/api/v1/system/agent"} {
+	for _, path := range []string{"/api/v1/system/info", "/api/v1/system/stats", "/api/v1/system/metrics", "/api/v1/system/agent"} {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
 		if rec.Code != 401 {
@@ -74,7 +78,7 @@ func TestSystemRoutesRequireSessionAndAttributeActor(t *testing.T) {
 	if len(actors) != 0 {
 		t.Fatal("agent called before login")
 	}
-	for _, path := range []string{"/api/v1/system/info", "/api/v1/system/stats", "/api/v1/system/agent"} {
+	for _, path := range []string{"/api/v1/system/info", "/api/v1/system/stats", "/api/v1/system/metrics", "/api/v1/system/agent"} {
 		req := httptest.NewRequest("GET", path, nil)
 		req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: sess.Token})
 		req.Header.Set("Axion-Actor", "9999") // browser input must not select the audit actor

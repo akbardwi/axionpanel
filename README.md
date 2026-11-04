@@ -19,13 +19,14 @@ work. Static UI references/prototypes are design artifacts with mock data.
 
 Implemented:
 - Agent foundation: peer-UID-checked Unix socket, strict request validation and
-  three read-only operations (`system.info`, `system.stats`,
+  four read-only operations (`system.info`, `system.stats`, `system.metrics`,
   `capabilities.refresh`). No host mutation yet; see [docs/agent.md](docs/agent.md).
-- Local host data in the panel: authenticated `GET /api/v1/system/{info,stats,agent}`
+- Local host data in the panel: authenticated `GET /api/v1/system/{info,stats,metrics,agent}`
   proxied to the agent socket (`-agent-socket`, default
-  `/run/axionpanel/agent.sock`); the Overview screen shows a live host-data
-  card above the static sample. Without a running agent it reports
-  `agent unavailable` instead of showing values.
+  `/run/axionpanel/agent.sock`). The Overview header and its four resource
+  cards show real hostname, OS, uptime, RAM, CPU, root disk and network
+  throughput, refreshed every 5 s. Without a running agent those regions say
+  `unavailable` with a reason instead of showing sample values.
 - Authentication: argon2id password hashing, TOTP 2FA + recovery codes, hashed
   sessions with idle/absolute expiry, sudo mode, CSRF + Origin enforcement,
   failed-login lockout and per-IP/per-username throttling.
@@ -100,7 +101,7 @@ gates. Distributed scheduling/consensus/HA is not promised by the multi-node UI.
 
 - Go: panel and agent binaries; initial store uses `modernc.org/sqlite`
 - Vue 3 + Vite + Tailwind: production UI embedded in the panel binary via
-  `go:embed`; hash routing, no SPA server-side fallback needed
+  `go:embed`; HTML5 history routing with a server shell fallback for client routes
 - SQLite: central MVP metadata; optional future PostgreSQL adapter
 
 ## Layout

@@ -9,7 +9,7 @@ implemented so far; the full protocol is specified in `docs/spec.md` §6.
 ## Status
 
 Implemented and tested: socket transport, peer-UID gate, strict request
-envelope, three read-only operations, and a host policy loader. Not yet
+envelope, four read-only operations, and a host policy loader. Not yet
 implemented: any mutating operation, remote mTLS transport, jobs/stats/terminal
 endpoints, installer, and systemd unit.
 
@@ -103,11 +103,15 @@ requests finish for up to 5 seconds, then force-closes what remains.
 |---|---|
 | `system.info` | host identity and the capability catalogue |
 | `system.stats` | load average, memory, uptime read from `/proc` |
+| `system.metrics` | live CPU percent, root disk usage and default-interface network throughput |
 | `capabilities.refresh` | re-detect tools and capabilities |
 
 `system.info` reads `/proc/sys/kernel/osrelease`, `/etc/os-release` and the
 hostname; `system.stats` reads `/proc/loadavg`, `/proc/meminfo` and
-`/proc/uptime`; `capabilities.refresh` only performs PATH lookups. None of them
+`/proc/uptime`; `system.metrics` samples `/proc/stat` and `/proc/net/dev` twice
+250 ms apart and stats the root filesystem, returning a null resource plus a
+sanitized reason (`read_failed`, `invalid_data`, `no_default_route`) on any
+partial failure; `capabilities.refresh` only performs PATH lookups. None of them
 writes, spawns processes, or accepts a panel-supplied path. `detected_tools` reports only
 `exec.LookPath` results — a present binary is *not* a managed capability. Every
 managed feature (`php`, `database`, `firewall`, `docker`, `compose`,

@@ -16,6 +16,7 @@ import (
 type Client interface {
 	Info(ctx context.Context) (*agentclient.Info, error)
 	Stats(ctx context.Context) (*agentclient.Stats, error)
+	Metrics(ctx context.Context) (*agentclient.Metrics, error)
 }
 
 // Handler serves /api/v1/system/*. The auth middleware is supplied by the
@@ -32,11 +33,12 @@ func (h *Handler) Register(mux *http.ServeMux, wrap func(http.Handler) http.Hand
 	}
 	mux.Handle("GET /api/v1/system/info", wrap(http.HandlerFunc(h.handleInfo)))
 	mux.Handle("GET /api/v1/system/stats", wrap(http.HandlerFunc(h.handleStats)))
+	mux.Handle("GET /api/v1/system/metrics", wrap(http.HandlerFunc(h.handleMetrics)))
 	mux.Handle("GET /api/v1/system/agent", wrap(http.HandlerFunc(h.handleStatus)))
 	// Method-specific GET patterns do not cover other verbs: a POST would fall
 	// through to the panel's /api/ 404. Mount an explicit 405 for the same
 	// paths so a wrong method is unambiguous and carries Allow.
-	for _, path := range []string{"/api/v1/system/info", "/api/v1/system/stats", "/api/v1/system/agent"} {
+	for _, path := range []string{"/api/v1/system/info", "/api/v1/system/stats", "/api/v1/system/metrics", "/api/v1/system/agent"} {
 		mux.Handle(path, wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Allow", "GET, HEAD")
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
@@ -63,6 +65,15 @@ func (h *Handler) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, stats)
+}
+
+func (h *Handler) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics, err := h.Client.Metrics(r.Context())
+	if err != nil {
+		writeAgentError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, metrics)
 }
 
 // handleStatus is the connection probe. An unreachable agent is a normal state

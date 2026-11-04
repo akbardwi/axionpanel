@@ -289,7 +289,7 @@ network addresses. Never publish an unauthenticated agent listener.
 ### 6.1 Endpoints
 
 Implemented so far: `GET /v1/info` and `POST /v1/ops/{name}`, with the
-read-only operations `system.info`, `system.stats` and `capabilities.refresh`
+read-only operations `system.info`, `system.stats`, `system.metrics` and `capabilities.refresh`
 (see `docs/agent.md`). Every other row below is design, not a running endpoint;
 the agent catalog reports the actual registrations.
 
@@ -337,7 +337,7 @@ capability cache previously allowed the operation.
 
 | Operation | Mode | Notes |
 |---|---|---|
-| `system.info`, `system.stats` | sync | |
+| `system.info`, `system.stats`, `system.metrics` | sync | |
 | `service.list`, `service.action` | sync | `start|stop|restart|reload`, names limited to `allowed_services` |
 | `site.apply` | async | system user, dirs, PHP-FPM pool, vhost, SSL binding, suspension |
 | `site.remove` | async | optional file removal |
@@ -491,19 +491,20 @@ Auth rows (password change, session listing/revocation) stay
 | `GET /services` | |
 | `POST /services/{name}/{action}` | |
 
-Implemented in this revision: `GET /system/info`, `GET /system/stats` and
-`GET /system/agent`, local host only. They require a valid session (safe GETs,
-no CSRF token), proxy the agent's read-only `GET /v1/info` and
-`POST /v1/ops/system.stats` over the Unix socket named by the panel flag
+Implemented in this revision: `GET /system/info`, `GET /system/stats`,
+`GET /system/metrics` and `GET /system/agent`, local host only. They require a
+valid session (safe GETs, no CSRF token), proxy the agent's read-only
+`GET /v1/info`, `POST /v1/ops/system.stats` and `POST /v1/ops/system.metrics`
+over the Unix socket named by the panel flag
 `-agent-socket` (default `/run/axionpanel/agent.sock`), and send
 `Axion-Actor` from the validated session's user ID, never from the browser.
 Responses are `Cache-Control: no-store`. An unreachable agent or a protocol,
 oversize (1 MiB) or malformed response yields `503 agent_unavailable`; agent
 4xx/501 codes pass through, agent 5xx collapse to `502 agent_error` with no
 internal detail; `GET /system/agent` answers `200 {connected:false}` instead.
-The Overview screen shows these values in a "Host data (live)" card above the
-static design sample. `WS /ws/stats`, services and multi-host selection stay
-**DESIGN / NOT IMPLEMENTED**.
+The Overview screen renders these values in its header and four resource cards
+(refresh every 5 s; no history is fabricated). `WS /ws/stats`, services and
+multi-host selection stay **DESIGN / NOT IMPLEMENTED**.
 
 ### Sites and PHP
 

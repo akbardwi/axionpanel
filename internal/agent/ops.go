@@ -28,6 +28,7 @@ func builtinOperations() []struct {
 	}{
 		{"system.info", opSystemInfo},
 		{"system.stats", opSystemStats},
+		{"system.metrics", opSystemMetrics},
 		{"capabilities.refresh", opCapabilitiesRefresh},
 	}
 }

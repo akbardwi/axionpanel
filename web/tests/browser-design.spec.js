@@ -6,7 +6,7 @@ for (const theme of ['dark','light']) {
     page.on('pageerror',error=>errors.push(error.message))
     const result=[]
     for (const route of routes) {
-      await page.goto('/#/'+route)
+      await page.goto('/'+route)
       await page.locator('main').waitFor()
       await page.evaluate(mode=>document.documentElement.classList.toggle('dark',mode==='dark'),theme)
       await expect(page.locator('main')).toBeVisible()
@@ -21,7 +21,7 @@ for (const theme of ['dark','light']) {
   })
 }
 test('theme switch changes the rendered palette',async({page})=>{
-  await page.goto('/#/overview')
+  await page.goto('/overview')
   const dark = await page.locator('main').evaluate(el=>getComputedStyle(el).backgroundColor)
   await page.getByRole('button',{name:'Light',exact:true}).click()
   expect(await page.locator('main').evaluate(el=>getComputedStyle(el).backgroundColor)).not.toEqual(dark)
@@ -29,7 +29,7 @@ test('theme switch changes the rendered palette',async({page})=>{
 test('icon ligatures render as glyphs, not literal text',async({page})=>{
   const bad=[]
   for (const route of routes) {
-    await page.goto('/#/'+route)
+    await page.goto('/'+route)
     await page.locator('main').waitFor()
     const wide=await page.evaluate(()=>[...document.querySelectorAll('.material-symbols-outlined')]
       .filter(el=>el.getBoundingClientRect().width>60)
@@ -40,11 +40,27 @@ test('icon ligatures render as glyphs, not literal text',async({page})=>{
 })
 test('mobile navigation is accessible without page overflow',async({page})=>{
   await page.setViewportSize({width:390,height:844})
-  await page.goto('/#/websites')
+  await page.goto('/websites')
   await expect(page.getByRole('button',{name:'Open navigation'})).toBeVisible()
   await page.getByRole('button',{name:'Open navigation'}).click()
   await page.getByRole('link',{name:'Databases',exact:true}).click()
   await expect(page.locator('h1')).toHaveText('Databases')
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBeTruthy()
   await page.screenshot({path:'../docs/design/screens/databases-mobile.png',fullPage:true})
+})
+test('overview action buttons are disabled, not clickable, in design preview',async({page})=>{
+  await page.goto('/overview')
+  await page.locator('main').waitFor()
+  const main=page.locator('main')
+  const buttons=main.getByRole('button')
+  await expect(buttons).toHaveCount(8)
+  for(const name of ['Open Web SSH','Create Backup','Reboot','Power Off','Manage All','Topology View','Filter','Export JSON Logs']) {
+    const button=main.getByRole('button',{name:new RegExp(`${name}.*unavailable`, 'i')})
+    await expect(button).toBeVisible()
+    await expect(button).toBeDisabled()
+    await expect(button).toHaveAttribute('title', /Unavailable.*no backend action/i)
+  }
+  await expect(main).toContainText('not loaded in design preview')
+  await expect(main.getByText('Example data — read-only. No host changes are performed.',{exact:true})).toBeVisible()
+  await expect(main.getByRole('heading',{name:'Host data (live)'})).toHaveCount(0)
 })

@@ -43,12 +43,12 @@ func TestSystemInfoRejectsUnknownParams(t *testing.T) {
 	}
 }
 
-// TestRegisterBuiltinsCatalogIsExactlyThree guards against a hardcoded alias
+// TestRegisterBuiltinsCatalogIsExactlyFour guards against a hardcoded alias
 // catalog drifting from what is actually registered.
-func TestRegisterBuiltinsCatalogIsExactlyThree(t *testing.T) {
+func TestRegisterBuiltinsCatalogIsExactlyFour(t *testing.T) {
 	r := NewRegistry()
 	RegisterBuiltins(r)
-	want := []string{"capabilities.refresh", "system.info", "system.stats"}
+	want := []string{"capabilities.refresh", "system.info", "system.metrics", "system.stats"}
 	if got := r.Names(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("registry names = %v, want %v", got, want)
 	}
@@ -373,7 +373,7 @@ func TestCatalogSnapshotIsACopy(t *testing.T) {
 	r := NewRegistry()
 	RegisterBuiltins(r)
 	a := catalogNames()
-	if len(a) != 3 {
+	if len(a) != 4 {
 		t.Fatalf("catalog = %v", a)
 	}
 	a[0] = "mutated"

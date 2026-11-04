@@ -272,6 +272,9 @@ func requiredObject(body []byte, fields ...string) error {
 }
 
 func decodeDocument(body []byte, out any) error {
+	if m, ok := out.(*Metrics); ok {
+		return decodeMetrics(body, m)
+	}
 	if _, ok := out.(*Info); ok {
 		if err := requiredObject(body, "version", "protocol", "os", "arch", "kernel", "hostname",
 			"detected_tools", "capabilities", "capability_revision", "observed_at", "operations"); err != nil {

@@ -50,10 +50,27 @@ func TestServesHashedAssetsImmutable(t *testing.T) {
 	}
 }
 
+func TestClientRoutesServeIndexForHistoryRouting(t *testing.T) {
+	// The router uses real paths (no hash), so a refresh or a pasted link on a
+	// client route must serve the app shell and let vue-router resolve it.
+	for _, p := range []string{"/overview", "/websites", "/containers", "/nodes", "/login"} {
+		rec := get(t, Handler(builtFS()), p)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200 (SPA shell)", p, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "AxionPanel") {
+			t.Errorf("GET %s body = %q, want index.html", p, rec.Body)
+		}
+		if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("GET %s Cache-Control = %q, want no-cache", p, cc)
+		}
+	}
+}
+
 func TestUnknownPathIs404NotIndex(t *testing.T) {
-	// The UI uses hash routing, so there is no SPA fallback: unknown paths must
-	// not return index.html (which would mask typos in API paths).
-	for _, p := range []string{"/nope", "/assets/missing.js", "/api/v1/unknown"} {
+	// Only known client routes get the shell. Unknown paths must not return
+	// index.html (which would mask typos and API mistakes).
+	for _, p := range []string{"/nope", "/assets/missing.js", "/api/v1/unknown", "/overview/extra"} {
 		if rec := get(t, Handler(builtFS()), p); rec.Code != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404", p, rec.Code)
 		}
@@ -67,12 +84,14 @@ func TestNoDirectoryListing(t *testing.T) {
 }
 
 func TestMissingBuildIs503(t *testing.T) {
-	rec := get(t, Handler(fstest.MapFS{".gitkeep": {}}), "/")
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("GET / without a build = %d, want 503", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), "make web") {
-		t.Errorf("body = %q, want build hint", rec.Body)
+	for _, p := range []string{"/", "/overview"} {
+		rec := get(t, Handler(fstest.MapFS{".gitkeep": {}}), p)
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("GET %s without a build = %d, want 503", p, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "make web") {
+			t.Errorf("GET %s body = %q, want build hint", p, rec.Body)
+		}
 	}
 }
 
