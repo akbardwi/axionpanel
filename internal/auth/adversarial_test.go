@@ -113,7 +113,7 @@ func TestIPv6IPParsingAndThrottle(t *testing.T) {
 	r := httptest.NewRequest("POST", "/", nil)
 	r.RemoteAddr = "[2001:db8:abcd::1]:12345"
 	r.Header.Set("X-Forwarded-For", "1.2.3.4")
-	if got := clientIP(r); got != "2001:db8:abcd::1" {
+	if got := peerIP(r); got != "2001:db8:abcd::1" {
 		t.Fatalf("IP = %q", got)
 	}
 	e := newMFAEnv(t, true, func(c *Config) { c.IPFailureLimit = 2 })

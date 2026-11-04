@@ -67,6 +67,7 @@ type Config struct {
 	LockoutWindow         time.Duration
 	Origin                string
 	AllowInsecureLoopback bool
+	TrustedProxies        []*net.IPNet
 	IPFailureLimit        int
 	MFAUserFailureLimit   int
 }
@@ -531,7 +532,7 @@ func (s *Service) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid_request", "Invalid username or password length.")
 		return
 	}
-	u, err := s.Authenticate(r.Context(), req.Username, req.Password, clientIP(r))
+	u, err := s.Authenticate(r.Context(), req.Username, req.Password, s.clientIP(r))
 	if err != nil {
 		authError(w, err)
 		return
@@ -552,7 +553,7 @@ func (s *Service) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 401, "invalid_credentials", "Sign in again.")
 		return
 	}
-	sess, err := s.newSession(u.ID, clientIP(r), r.UserAgent())
+	sess, err := s.newSession(u.ID, s.clientIP(r), r.UserAgent())
 	if err == nil {
 		err = insertSession(r.Context(), tx, sess)
 	}
@@ -708,7 +709,7 @@ func authError(w http.ResponseWriter, err error) {
 		internalError(w)
 	}
 }
-func clientIP(r *http.Request) string {
+func peerIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
@@ -718,6 +719,85 @@ func clientIP(r *http.Request) string {
 		return "unknown"
 	}
 	return ip.String()
+}
+
+// ParseTrustedProxies parses CIDR specs for reverse proxies whose forwarding
+// headers may be trusted. Each must be a non-empty valid CIDR.
+func ParseTrustedProxies(specs []string) ([]*net.IPNet, error) {
+	out := make([]*net.IPNet, 0, len(specs))
+	for _, spec := range specs {
+		spec = strings.TrimSpace(spec)
+		if spec == "" {
+			return nil, errors.New("auth: empty trusted proxy CIDR")
+		}
+		_, n, err := net.ParseCIDR(spec)
+		if err != nil {
+			return nil, fmt.Errorf("auth: invalid trusted proxy CIDR %q: %w", spec, err)
+		}
+		out = append(out, n)
+	}
+	return out, nil
+}
+
+// clientIP resolves the client address, honouring forwarding headers only when
+// the direct peer is a configured trusted proxy. Untrusted peers cannot spoof
+// the client identity, so per-IP throttling and lockout stay per real client.
+func (s *Service) clientIP(r *http.Request) string {
+	ip := peerIP(r)
+	if len(s.cfg.TrustedProxies) == 0 {
+		return ip
+	}
+	peer := net.ParseIP(ip)
+	if peer == nil || !ipIn(peer, s.cfg.TrustedProxies) {
+		return ip
+	}
+	if cf := singleForwardedIP(r.Header.Values("CF-Connecting-IP")); cf != "" {
+		return cf
+	}
+	xff := r.Header.Values("X-Forwarded-For")
+	if len(xff) != 1 {
+		return ip
+	}
+	// Walk the X-Forwarded-For chain right to left, skipping configured trusted
+	// hops; the first untrusted address is the client. A malformed hop before
+	// the first untrusted address fails closed to the peer: the chain is
+	// ambiguous, and skipping it would accept an attacker entry further left.
+	for _, part := range reverse(strings.Split(xff[0], ",")) {
+		c := net.ParseIP(strings.TrimSpace(part))
+		if c == nil {
+			return ip
+		}
+		if !ipIn(c, s.cfg.TrustedProxies) {
+			return c.String()
+		}
+	}
+	return ip
+}
+
+func singleForwardedIP(values []string) string {
+	if len(values) != 1 {
+		return ""
+	}
+	if ip := net.ParseIP(strings.TrimSpace(values[0])); ip != nil {
+		return ip.String()
+	}
+	return ""
+}
+
+func reverse(parts []string) []string {
+	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+		parts[i], parts[j] = parts[j], parts[i]
+	}
+	return parts
+}
+
+func ipIn(ip net.IP, nets []*net.IPNet) bool {
+	for _, n := range nets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 func bounded(s string, n int) string {
 	if len(s) > n {

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -34,6 +35,7 @@ func main() {
 	keyPath := flag.String("secret-key", "", "secret key file for encrypted fields (default: secret.key next to -db)")
 	origin := flag.String("origin", auth.DefaultConfig().Origin, "exact browser origin (scheme://host[:port]) allowed to call the API")
 	insecureLoopback := flag.Bool("insecure-loopback", false, "allow a plain-HTTP loopback -origin for local development (cookies lose Secure)")
+	trustedProxies := flag.String("trusted-proxy", "", "comma-separated CIDRs of reverse proxies whose CF-Connecting-IP/X-Forwarded-For headers are trusted (e.g. 127.0.0.1/32,::1/128)")
 	agentSocket := flag.String("agent-socket", "/run/axionpanel/agent.sock", "local agent Unix socket (read-only host data)")
 	bootstrap := flag.String("bootstrap-admin", "", "create the first admin user with this username, print a generated password, and exit")
 	flag.Parse()
@@ -41,6 +43,13 @@ func main() {
 	cfg := auth.DefaultConfig()
 	cfg.Origin = *origin
 	cfg.AllowInsecureLoopback = *insecureLoopback
+	if *trustedProxies != "" {
+		nets, err := auth.ParseTrustedProxies(strings.Split(*trustedProxies, ","))
+		if err != nil {
+			log.Fatalf("panel: -trusted-proxy: %v", err)
+		}
+		cfg.TrustedProxies = nets
+	}
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("panel: -origin %q: %v (HTTP origins need a loopback host and -insecure-loopback)", *origin, err)
 	}

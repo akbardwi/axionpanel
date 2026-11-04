@@ -11,6 +11,8 @@ Access it through an SSH tunnel. The flag removes `Secure` from cookies; do not
 use this configuration on a public listener or behind a public proxy. Neither
 binary currently implements HTTPS listener flags. Public deployment is outside
 this guide; do not change nginx or an existing host database to follow it.
+For the separate opt-in TLS reverse-proxy configuration, see
+[public-access.md](public-access.md). The loopback templates below stay unchanged.
 
 ## Files and privileges
 

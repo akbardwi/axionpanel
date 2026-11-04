@@ -1,0 +1,59 @@
+# AxionPanel nginx vhost example (manual, review before use).
+#
+# Replace panel.example.com. Terminate TLS here; the panel stays on loopback.
+# Copy to your panel's nginx include directory and run `nginx -t` before reload.
+#
+# Behind Cloudflare: fill the official IPv4/IPv6 lists from
+# https://www.cloudflare.com/ips-v4 and https://www.cloudflare.com/ips-v6,
+# and use Full (strict) TLS mode at the edge. Without a CDN, omit the
+# set_real_ip_from/real_ip_header lines and keep both proxy_set_header lines.
+
+server {
+    listen 80;
+    server_name panel.example.com;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/axionpanel-acme;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name panel.example.com;
+
+    # set_real_ip_from 173.245.48.0/20;  # ... full official list
+    # real_ip_header CF-Connecting-IP;
+
+    ssl_certificate /etc/letsencrypt/live/panel.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/panel.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:axp_tls:10m;
+    ssl_session_timeout 1d;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    server_tokens off;
+    client_max_body_size 8m;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/axionpanel-acme;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:7800;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        # Overwrite both headers from the peer address; never append or pass
+        # through client-supplied values. See docs/public-access.md.
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header CF-Connecting-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 30s;
+    }
+}

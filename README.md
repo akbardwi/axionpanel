@@ -158,14 +158,17 @@ This is a development setup, not an installer or production deployment.
    Open `http://127.0.0.1:7800/`, or use an SSH tunnel forwarding local port
    7800 to server port 7800. `-insecure-loopback` disables Secure cookies only
    for an explicit HTTP loopback origin. Do not use it for public access.
-   Native TLS, installer and trusted-proxy support are not implemented; peer-IP
-   rate limits are shared by clients behind a proxy/NAT. Setting `-origin` does
-   not enable TLS. Auth and the Overview "Host data (live)" card are functional;
-   every other host control remains sample UI. Without a running agent the card
-   reports `agent unavailable` instead of values. Point the panel at a local
-   agent with `-agent-socket /run/axionpanel/agent.sock` (the default); see
-   [docs/deployment.md](docs/deployment.md) for the systemd layout. These units
-   are templates only and were not installed or run under PID1.
+   Native TLS and an installer are not implemented. Optional `-trusted-proxy`
+   CIDRs enable client-IP handling behind a controlled reverse proxy; see
+   [docs/public-access.md](docs/public-access.md) for the opt-in TLS setup.
+   Setting `-origin` does not enable TLS. Auth and the Overview "Host data (live)"
+   card are functional; every other host control remains sample UI.
+   Without a running agent the card reports `agent unavailable` instead of values.
+   Point the panel at a local agent with
+   `-agent-socket /run/axionpanel/agent.sock` (the default); see
+   [docs/deployment.md](docs/deployment.md) for the manual systemd templates.
+   Local deployment has exercised both services under PID1; this is not a
+   cross-distribution sandbox certification.
 
 MFA enrollment/disable and sudo have API endpoints but no wired settings UI yet.
 Password changes, session listing/revocation and audit writes remain pending.

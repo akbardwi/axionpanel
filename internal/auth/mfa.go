@@ -75,7 +75,7 @@ func (s *Service) startChallenge(w http.ResponseWriter, r *http.Request, u *User
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(), `INSERT INTO mfa_challenges(token_hash,csrf_token_hash,user_id,ip,user_agent,created_at,expires_at) VALUES(?,?,?,?,?,?,?)`,
-		hashToken(token), hashToken(csrf), u.ID, clientIP(r), bounded(r.UserAgent(), 512), fmtTime(now), fmtTime(now.Add(challengeTTL))); err != nil {
+		hashToken(token), hashToken(csrf), u.ID, s.clientIP(r), bounded(r.UserAgent(), 512), fmtTime(now), fmtTime(now.Add(challengeTTL))); err != nil {
 		internalError(w)
 		return
 	}
@@ -264,11 +264,11 @@ func (s *Service) handleMFA(w http.ResponseWriter, r *http.Request) {
 		authError(w, errUnavailable)
 		return
 	}
-	if s.throttled(r.Context(), tx, "ip", ipKey(clientIP(r)), s.cfg.IPFailureLimit) {
+	if s.throttled(r.Context(), tx, "ip", ipKey(s.clientIP(r)), s.cfg.IPFailureLimit) {
 		authError(w, ErrRateLimited)
 		return
 	}
-	u, err := s.finishChallenge(r.Context(), tx, hashToken(ch.Value), req.Code, req.RecoveryCode, clientIP(r))
+	u, err := s.finishChallenge(r.Context(), tx, hashToken(ch.Value), req.Code, req.RecoveryCode, s.clientIP(r))
 	if err != nil {
 		// Only expected authentication outcomes persist (burned attempt,
 		// throttle, deleted challenge). Anything else rolls back so a
@@ -284,7 +284,7 @@ func (s *Service) handleMFA(w http.ResponseWriter, r *http.Request) {
 		authError(w, err)
 		return
 	}
-	sess, err := s.newSession(u.ID, clientIP(r), r.UserAgent())
+	sess, err := s.newSession(u.ID, s.clientIP(r), r.UserAgent())
 	if err != nil {
 		internalError(w)
 		return
@@ -377,7 +377,7 @@ func (s *Service) handleReauth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Re-verification is not a new sign-in: keep users.last_login_at.
-	u, err := s.authenticate(r.Context(), sess.User.Username, req.Password, clientIP(r), false)
+	u, err := s.authenticate(r.Context(), sess.User.Username, req.Password, s.clientIP(r), false)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
 			writeError(w, 403, "invalid_credentials", "Invalid credentials.")
@@ -451,7 +451,7 @@ func (s *Service) handleReauth(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			// Legitimate rejection: the guess burns one MFA failure and the
 			// write must persist before the verdict is sent.
-			if recErr := s.recordMFAFailure(r.Context(), tx, clientIP(r), u.ID); recErr != nil {
+			if recErr := s.recordMFAFailure(r.Context(), tx, s.clientIP(r), u.ID); recErr != nil {
 				internalError(w)
 				return
 			}
@@ -571,7 +571,7 @@ func (s *Service) handleEnable(w http.ResponseWriter, r *http.Request) {
 	step, matched := totp.Match(sec, req.Code, s.now.Now(), totp.Default, 1)
 	if !matched {
 		// Enrollment guesses share the per-user MFA failure budget.
-		if err := s.recordMFAFailure(r.Context(), tx, clientIP(r), sess.UserID); err != nil || tx.Commit() != nil {
+		if err := s.recordMFAFailure(r.Context(), tx, s.clientIP(r), sess.UserID); err != nil || tx.Commit() != nil {
 			internalError(w)
 			return
 		}
