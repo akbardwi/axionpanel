@@ -4,7 +4,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,6 +23,7 @@ import (
 
 	"axionpanel/internal/agentclient"
 	"axionpanel/internal/auth"
+	"axionpanel/internal/paneltls"
 	"axionpanel/internal/secret"
 	"axionpanel/internal/store"
 	"axionpanel/internal/systemapi"
@@ -36,9 +40,50 @@ func main() {
 	origin := flag.String("origin", auth.DefaultConfig().Origin, "exact browser origin (scheme://host[:port]) allowed to call the API")
 	insecureLoopback := flag.Bool("insecure-loopback", false, "allow a plain-HTTP loopback -origin for local development (cookies lose Secure)")
 	trustedProxies := flag.String("trusted-proxy", "", "comma-separated CIDRs of reverse proxies whose CF-Connecting-IP/X-Forwarded-For headers are trusted (e.g. 127.0.0.1/32,::1/128)")
+	tlsCert := flag.String("tls-cert", "", "PEM certificate chain for native HTTPS (requires -tls-key)")
+	tlsKey := flag.String("tls-key", "", "PEM private key for native HTTPS (requires -tls-cert)")
+	initTLS := flag.Bool("init-tls", false, "generate a self-signed certificate for -tls-host at -tls-cert/-tls-key, then exit")
+	tlsHost := flag.String("tls-host", "", "IP address or DNS name for -init-tls certificate SAN")
 	agentSocket := flag.String("agent-socket", "/run/axionpanel/agent.sock", "local agent Unix socket (read-only host data)")
 	bootstrap := flag.String("bootstrap-admin", "", "create the first admin user with this username, print a generated password, and exit")
 	flag.Parse()
+
+	if *initTLS {
+		if *tlsHost == "" {
+			log.Fatalf("panel: -init-tls requires -tls-host")
+		}
+		if *tlsCert == "" || *tlsKey == "" {
+			log.Fatalf("panel: -init-tls requires both -tls-cert and -tls-key")
+		}
+		cert, err := paneltls.Init(*tlsCert, *tlsKey, *tlsHost)
+		if err != nil {
+			log.Fatalf("panel: -init-tls: %v", err)
+		}
+		fingerprint := sha256.Sum256(cert.Raw)
+		fmt.Printf("Created self-signed TLS certificate for %s.\n", *tlsHost)
+		fmt.Printf("Certificate: %s\n", *tlsCert)
+		fmt.Printf("Private key: %s (keep private)\n", *tlsKey)
+		fmt.Printf("SHA-256 fingerprint: %s\n", hex.EncodeToString(fingerprint[:]))
+		fmt.Printf("Valid from: %s\n", cert.NotBefore.UTC().Format(time.RFC3339))
+		fmt.Printf("Valid until: %s\n", cert.NotAfter.UTC().Format(time.RFC3339))
+		return
+	}
+	if *tlsHost != "" {
+		log.Fatalf("panel: -tls-host is only valid with -init-tls")
+	}
+	tlsEnabled, err := resolveTLSSettings(*tlsCert, *tlsKey, *insecureLoopback)
+	if err != nil {
+		log.Fatalf("panel: %v", err)
+	}
+	var tlsConfig *tls.Config
+	if tlsEnabled {
+		tlsConfig, err = serverTLS(*addr, *origin, *tlsCert, *tlsKey)
+		if err != nil {
+			log.Fatalf("panel: %v", err)
+		}
+	} else if err := validatePlainBind(*addr); err != nil {
+		log.Fatalf("panel: %v", err)
+	}
 
 	cfg := auth.DefaultConfig()
 	cfg.Origin = *origin
@@ -52,6 +97,17 @@ func main() {
 	}
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("panel: -origin %q: %v (HTTP origins need a loopback host and -insecure-loopback)", *origin, err)
+	}
+	// Reserve the socket after config/TLS/auth validation but before creating
+	// state. Fatal startup errors exit the process, which also closes any
+	// acquired listener. Bootstrap and init modes never bind.
+	var listener net.Listener
+	if *bootstrap == "" {
+		listener, err = net.Listen("tcp", *addr)
+		if err != nil {
+			log.Fatalf("panel: %v", err)
+		}
+		defer listener.Close()
 	}
 	if *keyPath == "" {
 		*keyPath = filepath.Join(filepath.Dir(*dbPath), "secret.key")
@@ -94,10 +150,19 @@ func main() {
 	})
 	mux.Handle("/", webui.Handler(web.Dist()))
 
-	log.Printf("axionpanel panel %s listening on %s", version, *addr)
+	handler := http.Handler(webui.SecurityHeaders(mux))
+	if tlsConfig != nil {
+		guarded, err := newHostGuard(*origin, handler)
+		if err != nil {
+			log.Fatalf("panel: %v", err)
+		}
+		handler = guarded
+	}
+
+	log.Printf("axionpanel panel %s listening on %s (native TLS: %t)", version, listener.Addr(), tlsConfig != nil)
 	srv := &http.Server{
-		Addr:              *addr,
-		Handler:           webui.SecurityHeaders(mux),
+		Handler:           handler,
+		TLSConfig:         tlsConfig,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -111,7 +176,13 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	serveErr := make(chan error, 1)
-	go func() { serveErr <- srv.ListenAndServe() }()
+	go func() {
+		if tlsConfig != nil {
+			serveErr <- srv.ServeTLS(listener, "", "")
+			return
+		}
+		serveErr <- srv.Serve(listener)
+	}()
 	select {
 	case err := <-serveErr:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {

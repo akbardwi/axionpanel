@@ -5,7 +5,7 @@ managing a local server and multiple enrolled hosts from one dashboard, with a
 path to multi-user hosting later. The license is still undecided; the project
 is not yet open source by definition.
 
-**Status: pre-alpha — working authentication, embedded UI and read-only local host data; management features remain design-only.**
+**Status: pre-alpha — working authentication, native HTTPS, embedded UI and read-only local host data; management features remain design-only.**
 
 The panel binary now serves the embedded Vue UI and a real authentication
 backend: password login, TOTP 2FA with single-use recovery codes, hashed
@@ -18,6 +18,9 @@ work. Static UI references/prototypes are design artifacts with mock data.
 ## MVP scope
 
 Implemented:
+- Native panel HTTPS with prevalidated certificate/key files and explicit
+  self-signed IP/DNS initialization (`-init-tls`). Plain HTTP is loopback-only.
+  See [native HTTPS setup](docs/native-tls-plan.md); no installer or live cutover yet.
 - Agent foundation: peer-UID-checked Unix socket, strict request validation and
   four read-only operations (`system.info`, `system.stats`, `system.metrics`,
   `capabilities.refresh`). No host mutation yet; see [docs/agent.md](docs/agent.md).
@@ -38,7 +41,7 @@ Implemented:
   records from the read-only agent. See [audit coverage](internal/audit/README.md).
 
 Design only (not implemented):
-- Installer, native panel HTTPS for direct-IP access, settings UI and audit viewer
+- Installer, direct-IP onboarding/systemd migration, settings UI and audit viewer
   ([installation and provisioning plan](docs/installation-plan.md))
 - Full host dashboard, streaming metrics, services, terminal and logs
 - Nginx/Apache websites (PHP-FPM, static, reverse proxy), explicit coexistence
@@ -169,7 +172,7 @@ This is a development setup, not an installer or production deployment.
    Open `http://127.0.0.1:7800/`, or use an SSH tunnel forwarding local port
    7800 to server port 7800. `-insecure-loopback` disables Secure cookies only
    for an explicit HTTP loopback origin. Do not use it for public access.
-   Native TLS and an installer are not implemented. Optional `-trusted-proxy`
+   Native TLS is implemented; the installer is not. Optional `-trusted-proxy`
    CIDRs enable client-IP handling behind a controlled reverse proxy; see
    [docs/public-access.md](docs/public-access.md) for the opt-in TLS setup.
    Setting `-origin` does not enable TLS. Auth and the Overview's existing

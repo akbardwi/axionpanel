@@ -1,9 +1,10 @@
 # Standalone installation and host provisioning plan
 
-Status: approved design, NOT IMPLEMENTED. This supplements [spec.md](spec.md),
-not a replacement or a claim that `install.sh`, native panel TLS, package jobs,
-or a software-management screen already exist. Current manual instructions
-remain in [deployment.md](deployment.md).
+Status: approved installer design, NOT IMPLEMENTED. This supplements
+[spec.md](spec.md). Native TLS and explicit certificate initialization are now
+implemented in the binary (see [native-tls-plan.md](native-tls-plan.md));
+`install.sh`, automated onboarding, package jobs and software-management screens
+remain unimplemented. Manual systemd templates remain in [deployment.md](deployment.md).
 
 ## 1. Alignment with the original MVP
 
@@ -40,7 +41,8 @@ hosting-stack prerequisites.
 - Stopping or removing a hosting service must not stop panel HTTPS or login.
 - The existing public pre-alpha deployment uses Nginx and loopback HTTP. Leave
   it unchanged until native TLS is implemented, verified and explicitly migrated.
-  Public direct-IP installation is not supported by the current binary yet.
+  The binary supports manual direct-IP HTTPS; automated installation and live
+  migration remain pending.
 
 ## 3. Installer contract
 

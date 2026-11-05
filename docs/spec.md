@@ -1,12 +1,13 @@
 # AxionPanel technical specification
 
-Status: draft v0.3, expanded MVP (Phase 1). Last updated 2026-11-04.
+Status: draft v0.3, expanded MVP (Phase 1). Last updated 2026-11-05.
 
 **Implementation boundary:** this is a design contract, not a feature inventory.
 The repository currently implements authentication/MFA/sudo, transactional auth
 audit, an embedded UI, authenticated read-only local telemetry, and a local agent
 with central policy enforcement and immutable operation discovery. Native panel
-TLS, the installer, provisioning and workload management remain unimplemented.
+TLS and explicit certificate initialization are implemented. The installer, secure
+entrance, provisioning and workload management remain unimplemented.
 The contracts below include **DESIGN / NOT IMPLEMENTED** features, including
 remote enrollment/mTLS, containers/Compose, Git deploy, curated templates,
 backup/restore, Fail2ban monitoring and SSH public-key management. The initial
@@ -204,9 +205,11 @@ self-signed certificate containing the selected IP in its Subject Alternative
 Name and prints the fingerprint; self-signed encryption does not authenticate
 server identity by itself and browsers warn until trusted. Public plaintext HTTP
 login is not supported. The admin can later switch to a trusted certificate for a
-panel hostname. HSTS is sent only with a trusted certificate. The current public
-pre-alpha still uses loopback HTTP plus Nginx and is unchanged until native TLS
-is implemented, verified and explicitly migrated. Every response carries
+panel hostname. HSTS remains omitted; enabling it requires a separate trusted-TLS
+policy. Native HTTPS and explicit self-signed certificate initialization now exist
+in the binary; installer/onboarding remain planned. See [native-tls-plan.md](native-tls-plan.md).
+The public pre-alpha still uses loopback HTTP plus Nginx, unchanged until an
+explicit migration. Normal application responses carry
 `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`,
 `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`.
 WebSocket upgrades require a valid session and a matching `Origin`.
@@ -1104,7 +1107,7 @@ auth/navigation/lifecycle checks. It does not prove installer or mutation gates.
 | M0 | workspace scaffold, initial SQLite store/migration and constraint tests (present); panel health endpoint; agent stub |
 | M1 | PARTIAL: login, 2FA, sessions, CSRF, sudo, password rotation and transactional auth audit implemented. DESIGN / NOT IMPLEMENTED: entrance path, settings UI, audit viewer; expanded-schema migrations reviewed separately |
 | M2 | PARTIAL: local agent socket/peer credentials, deny-by-default policy, immutable operation catalog and read-only info/stats/metrics/capability detection implemented (`docs/agent.md`); authenticated `GET /api/v1/system/{info,stats,metrics,agent}` wired for the local host. DESIGN / NOT IMPLEMENTED: managed capabilities, services, durable jobs and reconciliation |
-| M2a | DESIGN / NOT IMPLEMENTED: standalone panel HTTPS for direct IP access, exact-origin config, initial-admin bootstrap file and secret entrance; no hosting-stack dependency |
+| M2a | PARTIAL: native panel HTTPS for direct IP/DNS access, exact-origin config and explicit certificate initialization implemented; no hosting-stack dependency. DESIGN / NOT IMPLEMENTED: protected initial-admin bootstrap file and secret entrance |
 | M2b | DESIGN / NOT IMPLEMENTED: signed release packaging, clean-host installer, idempotent re-run, upgrade/recovery and uninstall boundaries ([installation plan](installation-plan.md)) |
 | M2c | DESIGN / NOT IMPLEMENTED: durable mutation audit/jobs, typed optional Nginx/Apache/PHP-FPM/MariaDB installation, Software/Services status, reviewed catalog and unmanaged-service boundaries |
 | M3 | DESIGN / NOT IMPLEMENTED: sites, users, PHP-FPM, Nginx/Apache adapters and explicit coexistence profiles, validate/apply/test/rollback after a deliberately installed/managed web server |

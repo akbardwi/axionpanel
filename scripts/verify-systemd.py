@@ -119,7 +119,7 @@ if doc.is_file():
     content = doc.read_text()
     for needle in ("no TLS", "SSH tunnel", "not tested under PID1", "SIGTERM", "stale",
                    "0400", "getent group axionpanel", "useradd", "RuntimeDirectoryPreserve",
-                   "-bootstrap-admin", "runuser", "umask 077", "parsed only", "not enforced",
+                   "-bootstrap-admin", "runuser", "umask 077", "Policy is enforced on every operation", "no generic exec",
                    "TimeoutStopSec=15s", "systemd-analyze verify"):
         check(needle in content, f"docs: {needle}")
 

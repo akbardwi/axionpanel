@@ -8,8 +8,10 @@ own verification. See [agent.md](agent.md) for transport and policy details.
 **This sample has no TLS and no public exposure.** The panel listens only on
 `127.0.0.1:7800`, using `-origin http://127.0.0.1:7800 -insecure-loopback`.
 Access it through an SSH tunnel. The flag removes `Secure` from cookies; do not
-use this configuration on a public listener or behind a public proxy. Neither
-binary currently implements HTTPS listener flags. Public deployment is outside
+use this configuration on a public listener or behind a public proxy. The
+agent has no public HTTPS listener. The panel supports optional native TLS
+(see [native-tls-plan.md](native-tls-plan.md)); these templates do not enable it.
+Public deployment is outside
 this guide; do not change nginx or an existing host database to follow it.
 For the separate opt-in TLS reverse-proxy configuration, see
 [public-access.md](public-access.md). The loopback templates below stay unchanged.
@@ -297,6 +299,6 @@ cover the panel client separately; the direct smoke is not proof of every API.
 - On upgrade, stop panel and agent, back up state/key, replace only trusted
   binaries/units, verify, reload and start in the documented order. Schema
   rollback is not promised; retain restorable backups.
-- No `panel.toml`, TLS flags, mTLS remote transport, socket activation, generic
-  exec or host mutation is supplied by this deployment. Design-spec paths for
+- No `panel.toml`, native-TLS configuration, mTLS remote transport, socket activation,
+  generic exec or host mutation is supplied by these deployment templates. Design-spec paths for
   future features are not supported configuration for these binaries.
