@@ -157,8 +157,19 @@ This is a development setup, not an installer or production deployment.
    ./bin/axionpanel -db ./data/panel.db -bootstrap-admin admin
    ```
 
-   Save the generated password securely; it is printed once. Bootstrap refuses
-   to run when any user exists. Keep `data/secret.key` (0600) separate from DB
+   Save the generated password securely; it is printed once. **Alternatively,
+   on an empty panel**, use private-file setup instead of the bootstrap command
+   above:
+
+   ```sh
+   ./bin/axionpanel -init-entrance -entrance-file ./data/entrance
+   ./bin/axionpanel -db ./data/panel.db -bootstrap-admin admin \
+     -entrance-file ./data/entrance -bootstrap-out ./data/bootstrap.json
+   ```
+
+   `bootstrap.json` is 0600, created exclusively, and contains the username,
+   generated password, secret entrance and origin. Bootstrap refuses to run
+   when any user exists. Keep `data/secret.key` (0600) separate from DB
    backups; losing it makes encrypted TOTP secrets unreadable. Existing keys
    readable by group/others are rejected rather than silently replaced.
 
@@ -168,6 +179,12 @@ This is a development setup, not an installer or production deployment.
    ./bin/axionpanel -db ./data/panel.db \
      -addr 127.0.0.1:7800 -origin http://127.0.0.1:7800 -insecure-loopback
    ```
+
+   If using the optional entrance, also pass `-entrance-file ./data/entrance`
+   when starting the server, then visit the exact path stored in that file before
+   login. Keep the same `-origin` for bootstrap and serving. The example above
+   uses legacy stdout bootstrap without the gate; see
+   [secure onboarding](docs/secure-onboarding.md) for native HTTPS setup.
 
    Open `http://127.0.0.1:7800/`, or use an SSH tunnel forwarding local port
    7800 to server port 7800. `-insecure-loopback` disables Secure cookies only

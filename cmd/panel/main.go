@@ -45,8 +45,34 @@ func main() {
 	initTLS := flag.Bool("init-tls", false, "generate a self-signed certificate for -tls-host at -tls-cert/-tls-key, then exit")
 	tlsHost := flag.String("tls-host", "", "IP address or DNS name for -init-tls certificate SAN")
 	agentSocket := flag.String("agent-socket", "/run/axionpanel/agent.sock", "local agent Unix socket (read-only host data)")
-	bootstrap := flag.String("bootstrap-admin", "", "create the first admin user with this username, print a generated password, and exit")
+	bootstrap := flag.String("bootstrap-admin", "", "create the first admin user; print a generated password unless -bootstrap-out is supplied, then exit")
+	bootstrapOut := flag.String("bootstrap-out", "", "write the one-time bootstrap artifact to this owner-only file (requires -bootstrap-admin and -entrance-file)")
+	initEntrance := flag.Bool("init-entrance", false, "generate a secret entrance path at -entrance-file, then exit")
+	entranceFile := flag.String("entrance-file", "", "owner-only file containing the 13-byte secret entrance path")
 	flag.Parse()
+
+	if *initEntrance {
+		if *initTLS || *bootstrap != "" || *bootstrapOut != "" {
+			log.Fatalf("panel: -init-entrance cannot be combined with -init-tls or -bootstrap-admin")
+		}
+		if *entranceFile == "" {
+			log.Fatalf("panel: -init-entrance requires -entrance-file")
+		}
+		if err := initEntranceFile(*entranceFile); err != nil {
+			log.Fatalf("panel: -init-entrance: %v", err)
+		}
+		fmt.Printf("Secret entrance written to %s.\n", *entranceFile)
+		return
+	}
+	if *bootstrapOut != "" && *bootstrap == "" {
+		log.Fatalf("panel: -bootstrap-out requires -bootstrap-admin")
+	}
+	if *bootstrapOut != "" && *entranceFile == "" {
+		log.Fatalf("panel: -bootstrap-out requires -entrance-file so the artifact includes the secret entrance")
+	}
+	if *bootstrapOut != "" && *initTLS {
+		log.Fatalf("panel: -bootstrap-out cannot be combined with -init-tls")
+	}
 
 	if *initTLS {
 		if *tlsHost == "" {
@@ -98,6 +124,18 @@ func main() {
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("panel: -origin %q: %v (HTTP origins need a loopback host and -insecure-loopback)", *origin, err)
 	}
+	// Load the secret entrance before binding or creating state. The raw path
+	// is validated by auth.ValidateEntrancePath and never logged.
+	entrancePath := ""
+	if *entranceFile != "" {
+		entrancePath, err = loadEntrancePath(*entranceFile)
+		if err != nil {
+			log.Fatalf("panel: -entrance-file: %v", err)
+		}
+		if err := auth.ValidateEntrancePath(entrancePath); err != nil {
+			log.Fatalf("panel: -entrance-file: %v", err)
+		}
+	}
 	// Reserve the socket after config/TLS/auth validation but before creating
 	// state. Fatal startup errors exit the process, which also closes any
 	// acquired listener. Bootstrap and init modes never bind.
@@ -129,6 +167,13 @@ func main() {
 	authSvc := auth.New(db, cfg, nil).WithSecretBox(box)
 
 	if *bootstrap != "" {
+		if *bootstrapOut != "" {
+			if err := bootstrapToFile(context.Background(), db, *bootstrap, *bootstrapOut, entrancePath, *origin); err != nil {
+				log.Fatalf("panel: bootstrap: %v", err)
+			}
+			fmt.Printf("Bootstrap credentials written to %s.\n", *bootstrapOut)
+			return
+		}
 		if err := bootstrapAdmin(context.Background(), db, authSvc, *bootstrap); err != nil {
 			log.Fatalf("panel: bootstrap: %v", err)
 		}
@@ -151,6 +196,13 @@ func main() {
 	mux.Handle("/", webui.Handler(web.Dist()))
 
 	handler := http.Handler(webui.SecurityHeaders(mux))
+	if entrancePath != "" {
+		gated, err := authSvc.Entrance(entrancePath, handler)
+		if err != nil {
+			log.Fatalf("panel: -entrance-file: %v", err)
+		}
+		handler = gated
+	}
 	if tlsConfig != nil {
 		guarded, err := newHostGuard(*origin, handler)
 		if err != nil {

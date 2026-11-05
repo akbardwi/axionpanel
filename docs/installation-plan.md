@@ -63,7 +63,7 @@ admin bootstrap runs as the non-root panel service user.
    binary but no write access to binaries, units or agent policy.
 4. Configure native HTTPS and an exact advertised origin, then generate initial
    admin access as the panel user. Preserve original auth requirements: secure
-   cookies, CSRF/Origin checks, MFA, sudo, and the planned secret entrance path.
+   cookies, CSRF/Origin checks, MFA, sudo, and the optional secret entrance path.
    The entrance path is defense in depth, never a substitute for authentication.
 5. Store one-time bootstrap access in an owner-only local file, not systemd
    logs, telemetry, remote callbacks or chat. Display the URL, certificate

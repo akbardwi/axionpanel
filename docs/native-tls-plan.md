@@ -14,20 +14,29 @@ port or configure a service/firewall. Do not replace an existing data directory.
 install -d -m 700 ./data ./panel-tls
 ./bin/axionpanel -init-tls -tls-host 127.0.0.1 \
   -tls-cert ./panel-tls/cert.pem -tls-key ./panel-tls/key.pem
-./bin/axionpanel -db ./data/panel.db -bootstrap-admin admin
+./bin/axionpanel -init-entrance -entrance-file ./data/entrance
+./bin/axionpanel -db ./data/panel.db -bootstrap-admin admin \
+  -origin https://127.0.0.1:8443 \
+  -entrance-file ./data/entrance -bootstrap-out ./data/bootstrap.json
 ./bin/axionpanel -db ./data/panel.db \
   -addr 127.0.0.1:8443 -origin https://127.0.0.1:8443 \
-  -tls-cert ./panel-tls/cert.pem -tls-key ./panel-tls/key.pem
+  -tls-cert ./panel-tls/cert.pem -tls-key ./panel-tls/key.pem \
+  -entrance-file ./data/entrance
 ```
 
-Open `https://127.0.0.1:8443`. Verify the certificate fingerprint over SSH before
-accepting any browser exception; keep bootstrap output private. For a manually
+Open the exact entrance path from `bootstrap.json`, then `https://127.0.0.1:8443`.
+Bootstrap writes credentials to an exclusive 0600 file without printing them;
+keep that file private. Verify the certificate fingerprint over SSH before
+accepting any browser exception. See [secure onboarding](secure-onboarding.md)
+for file permissions, failure behavior and gate limits. For a manually
 approved direct-IP listener, generate the certificate for the chosen server IP
 and change both `-addr` and `-origin` consistently. Do not expose port 7800 or the
 agent socket; public service and firewall setup remain separate operator actions.
-`curl --cacert ./panel-tls/cert.pem https://127.0.0.1:8443/api/health` verifies
-certificate identity against the explicitly selected certificate. Ordinary
-startup never creates a missing certificate and never falls back to HTTP.
+A health request with `curl --cacert ./panel-tls/cert.pem` verifies certificate
+identity against the explicitly selected certificate, but the entrance gate
+returns 404 until a valid discovery cookie is supplied. Keep any probe cookie
+jar private. Ordinary startup never creates a missing certificate and never
+falls back to HTTP.
 
 ## Goal
 
@@ -153,7 +162,7 @@ failures separately from supplemental regression coverage.
 ## Deferred
 
 ACME, automatic renewal/reload, HSTS, installer/signed release packaging, public
-service migration, secure entrance, Update Manager and Software Version Manager.
+service migration, Update Manager and Software Version Manager.
 
 Current live deployment stays `127.0.0.1:7800` behind Nginx. Tests open loopback
 ports only. No live service, firewall or public listener changes in this step.

@@ -6,8 +6,9 @@ Status: draft v0.3, expanded MVP (Phase 1). Last updated 2026-11-05.
 The repository currently implements authentication/MFA/sudo, transactional auth
 audit, an embedded UI, authenticated read-only local telemetry, and a local agent
 with central policy enforcement and immutable operation discovery. Native panel
-TLS and explicit certificate initialization are implemented. The installer, secure
-entrance, provisioning and workload management remain unimplemented.
+TLS, explicit certificate initialization, optional secret entrance and protected
+first-admin bootstrap files are implemented. The installer, provisioning and
+workload management remain unimplemented.
 The contracts below include **DESIGN / NOT IMPLEMENTED** features, including
 remote enrollment/mTLS, containers/Compose, Git deploy, curated templates,
 backup/restore, Fail2ban monitoring and SSH public-key management. The initial
@@ -171,9 +172,13 @@ through the agent.
 - TOTP 2FA (RFC 6238) with 10 single-use recovery codes, stored hashed.
   Enrolled accounts never receive a password-only session: login starts a
   short-lived challenge that must be completed with a code or recovery code.
-- Secret entrance path: the installer generates a random 12-character path.
-  Visiting it sets an entrance cookie. Unauthenticated requests without that
-  cookie get `404`, so scanners cannot fingerprint the panel.
+- Secret entrance path: the operator generates a random 12-character base64url
+  path with `-init-entrance`. An exact GET to it sets a 24-hour
+  `HttpOnly`, `SameSite=Strict` signed entrance cookie (Secure except for the
+  explicit insecure-loopback development origin) and redirects to `/login`.
+  Requests without a valid entrance cookie or a verified session get `404`,
+  reducing application-level discovery. This does not hide TLS/network
+  fingerprints or replace authentication.
 - Login rate limits: 5 failures per username per 15 minutes locks the account
   with backoff; 20 failures per IP per 15 minutes blocks the IP. The IP bucket
   keys on the TCP peer address; behind a reverse proxy or NAT every client
@@ -185,8 +190,8 @@ through the agent.
   `SameSite=Strict`). The database stores only the SHA-256 hash. Idle timeout
   2 hours, absolute 24 hours, both configurable.
 - CSRF: state-changing requests must send `X-CSRF-Token` matching the session
-  token, and the `Origin` header must match the panel origin. The token is
-  mirrored to the UI in a readable `axp_csrf` cookie (double-submit); session
+  token, and the `Origin` header must match the panel origin. The synchronizer
+  token is mirrored to the UI in a readable `axp_csrf` cookie; session
   and challenge cookies remain `HttpOnly`.
 - Sudo mode: the terminal, root-scope file access, firewall, SSH settings and
   security settings require re-authentication (password + TOTP) within the
@@ -508,8 +513,10 @@ with argon2id password hashing, failed-login lockout, per-IP and per-username
 throttles, idle/absolute session expiry, hashed session and challenge storage,
 CSRF/Origin enforcement, TOTP replay blocking and hashed single-use recovery
 codes. Auth also stores encrypted pending TOTP secrets (§5.4). The remaining
-Auth rows (password change, session listing/revocation) stay
-**DESIGN / NOT IMPLEMENTED**, as does the secret entrance path.
+Auth rows (session listing/revocation) stay
+**DESIGN / NOT IMPLEMENTED**. The secret entrance path is implemented as an
+optional discovery gate and first-admin bootstrap is implemented as an
+owner-only artifact write.
 
 ### System
 
@@ -1105,9 +1112,9 @@ auth/navigation/lifecycle checks. It does not prove installer or mutation gates.
 | Milestone | Scope |
 |---|---|
 | M0 | workspace scaffold, initial SQLite store/migration and constraint tests (present); panel health endpoint; agent stub |
-| M1 | PARTIAL: login, 2FA, sessions, CSRF, sudo, password rotation and transactional auth audit implemented. DESIGN / NOT IMPLEMENTED: entrance path, settings UI, audit viewer; expanded-schema migrations reviewed separately |
+| M1 | PARTIAL: login, 2FA, sessions, CSRF, sudo, password rotation and transactional auth audit implemented. DESIGN / NOT IMPLEMENTED: settings UI, audit viewer; expanded-schema migrations reviewed separately |
 | M2 | PARTIAL: local agent socket/peer credentials, deny-by-default policy, immutable operation catalog and read-only info/stats/metrics/capability detection implemented (`docs/agent.md`); authenticated `GET /api/v1/system/{info,stats,metrics,agent}` wired for the local host. DESIGN / NOT IMPLEMENTED: managed capabilities, services, durable jobs and reconciliation |
-| M2a | PARTIAL: native panel HTTPS for direct IP/DNS access, exact-origin config and explicit certificate initialization implemented; no hosting-stack dependency. DESIGN / NOT IMPLEMENTED: protected initial-admin bootstrap file and secret entrance |
+| M2a | PARTIAL: native panel HTTPS for direct IP/DNS access, exact-origin config, explicit certificate initialization, protected initial-admin bootstrap file and optional secret entrance implemented; no hosting-stack dependency. Clean-host installation remains unverified |
 | M2b | DESIGN / NOT IMPLEMENTED: signed release packaging, clean-host installer, idempotent re-run, upgrade/recovery and uninstall boundaries ([installation plan](installation-plan.md)) |
 | M2c | DESIGN / NOT IMPLEMENTED: durable mutation audit/jobs, typed optional Nginx/Apache/PHP-FPM/MariaDB installation, Software/Services status, reviewed catalog and unmanaged-service boundaries |
 | M3 | DESIGN / NOT IMPLEMENTED: sites, users, PHP-FPM, Nginx/Apache adapters and explicit coexistence profiles, validate/apply/test/rollback after a deliberately installed/managed web server |
