@@ -4,7 +4,10 @@ Status: approved installer design, NOT IMPLEMENTED. This supplements
 [spec.md](spec.md). Native TLS and explicit certificate initialization are now
 implemented in the binary (see [native-tls-plan.md](native-tls-plan.md));
 `install.sh`, automated onboarding, package jobs and software-management screens
-remain unimplemented. Manual systemd templates remain in [deployment.md](deployment.md).
+remain unimplemented. Manual loopback systemd templates remain in
+[deployment.md](deployment.md); a separate statically validated
+[native-HTTPS profile](native-tls-systemd.md) documents fresh-host preparation,
+not an installer or live migration.
 
 ## 1. Alignment with the original MVP
 

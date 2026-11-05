@@ -1,0 +1,5 @@
+# AxionPanel native-TLS directory. Install to /etc/tmpfiles.d/axionpanel-tls.conf.
+# The private key itself is created by -init-tls; this file only creates its
+# parent directory and must never pre-create the certificate, key, bootstrap
+# file or secret entrance file.
+d /etc/axionpanel/tls 0750 root axionpanel -

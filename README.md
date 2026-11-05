@@ -20,7 +20,9 @@ work. Static UI references/prototypes are design artifacts with mock data.
 Implemented:
 - Native panel HTTPS with prevalidated certificate/key files and explicit
   self-signed IP/DNS initialization (`-init-tls`). Plain HTTP is loopback-only.
-  See [native HTTPS setup](docs/native-tls-plan.md); no installer or live cutover yet.
+  A static systemd profile and operator procedure exist; no installer or live
+  cutover yet. See [native HTTPS plan](docs/native-tls-plan.md) and the
+  [manual systemd profile](docs/native-tls-systemd.md).
 - Agent foundation: peer-UID-checked Unix socket, strict request validation and
   four read-only operations (`system.info`, `system.stats`, `system.metrics`,
   `capabilities.refresh`). No host mutation yet; see [docs/agent.md](docs/agent.md).
@@ -41,8 +43,9 @@ Implemented:
   records from the read-only agent. See [audit coverage](internal/audit/README.md).
 
 Design only (not implemented):
-- Installer, direct-IP onboarding/systemd migration, settings UI and audit viewer
-  ([installation and provisioning plan](docs/installation-plan.md))
+- Installer, automated direct-IP onboarding/live systemd migration, settings UI
+  and audit viewer ([installation plan](docs/installation-plan.md); manual
+  [native-HTTPS systemd profile](docs/native-tls-systemd.md))
 - Full host dashboard, streaming metrics, services, terminal and logs
 - Nginx/Apache websites (PHP-FPM, static, reverse proxy), explicit coexistence
   profiles, Let's Encrypt/custom SSL

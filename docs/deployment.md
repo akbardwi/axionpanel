@@ -11,6 +11,8 @@ Access it through an SSH tunnel. The flag removes `Secure` from cookies; do not
 use this configuration on a public listener or behind a public proxy. The
 agent has no public HTTPS listener. The panel supports optional native TLS
 (see [native-tls-plan.md](native-tls-plan.md)); these templates do not enable it.
+A separate [native-HTTPS systemd profile](native-tls-systemd.md) exists for
+manual fresh-host preparation; it does not migrate this profile or verify PID1.
 Public deployment is outside
 this guide; do not change nginx or an existing host database to follow it.
 For the separate opt-in TLS reverse-proxy configuration, see

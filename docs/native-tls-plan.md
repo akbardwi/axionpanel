@@ -2,7 +2,9 @@
 
 Status: implemented in source, not deployed. Scope is the control-plane listener
 only. Hosting web servers, installer automation and provisioning remain later.
-This step does not complete the standalone-installation milestone.
+This step does not complete the standalone-installation milestone. A separate
+[manual native-HTTPS systemd profile](native-tls-systemd.md) covers fresh-host
+preparation and static verification, not installer automation or live migration.
 
 ## Manual local HTTPS example
 

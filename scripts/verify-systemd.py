@@ -108,6 +108,85 @@ for name, source in (("axionpanel", "panel"), ("axionpanel-agent", "agent")):
               f"{name}: -{flag} {value}")
 
 check(not list(UNIT_DIR.glob("*.socket")), "no socket-activation unit")
+native_path = UNIT_DIR / "axionpanel-native.service.example"
+check(native_path.is_file(), "axionpanel-native.service.example exists")
+if native_path.is_file():
+    native = parse_unit(native_path.read_text())
+    nget = lambda key: native.get(("Service", key), [None])[-1]
+    ncommand = nget("ExecStart") or ""
+    nflags = set(re.findall(r"(?:flag|fs)\.(?:String|Bool|Int)\(\"([a-z0-9-]+)\"",
+                            (REPO / "cmd/panel/main.go").read_text()))
+    nused = set(re.findall(r"(?:^|\s)-([a-z][a-z0-9-]*)", ncommand))
+    check(bool(nused), "native panel: CLI flags present")
+    check(not nused - nflags, f"native panel: unsupported flags {sorted(nused - nflags)}")
+    check(nget("User") == "axionpanel" and nget("Group") == "axionpanel", "native panel: service user/group")
+    check(nget("WorkingDirectory") == "/var/lib/axionpanel", "native panel: state working directory")
+    check(nget("StateDirectory") == "axionpanel" and nget("StateDirectoryMode") == "0700", "native panel: StateDirectory")
+    check(nget("UMask") == "0077" and nget("Restart") == "on-failure" and nget("TimeoutStopSec") == "15s", "native panel: lifecycle basics")
+    check(nget("NoNewPrivileges") == "yes" and nget("ProtectSystem") == "strict", "native panel: base sandboxing")
+    check(nget("CapabilityBoundingSet") == "" and nget("AmbientCapabilities") == "", "native panel: no capabilities")
+    check(nget("RestrictAddressFamilies") == "AF_UNIX AF_INET AF_INET6", "native panel: address families")
+    check(nget("MemoryDenyWriteExecute") == "yes" and nget("SystemCallFilter") == "@system-service", "native panel: syscall/execmem guards")
+    # Preserve every service sandbox/lifecycle directive from the loopback
+    # profile; only its command is different. This catches future drift too.
+    for (section, key), values in units.get("axionpanel", {}).items():
+        if section == "Service" and key != "ExecStart":
+            check(native.get((section, key)) == values, f"native panel: preserves {key}")
+    for key in ("ExecStartPre", "ExecStartPost", "ExecStopPost", "ReadWritePaths", "EnvironmentFile"):
+        check(nget(key) is None, f"native panel: no {key}")
+    check(not nused & {"init-tls", "tls-host", "init-entrance", "bootstrap-admin", "bootstrap-out", "trusted-proxy"},
+          "native panel: serving only, direct peer addresses")
+    check(native.get(("Install", "WantedBy")) == ["multi-user.target"], "native panel: manual enable target")
+    check(ncommand.startswith("/usr/local/axionpanel/bin/axionpanel "), "native panel: absolute trusted binary")
+    check("network-online.target" in " ".join(native.get(("Unit", "After"), [])), "native panel: network-online ordering")
+    check("network-online.target" in " ".join(native.get(("Unit", "Wants"), [])), "native panel: network-online dependency")
+    check(not native.get(("Unit", "Requires")), "native panel: agent failure does not stop login")
+    check(native.get(("Unit", "StartLimitIntervalSec")) == ["60"] and
+          native.get(("Unit", "StartLimitBurst")) == ["3"], "native panel: restart rate limit")
+    for key in ("InaccessiblePaths", "TemporaryFileSystem", "BindPaths", "BindReadOnlyPaths"):
+        check(nget(key) is None, f"native panel: no extra {key}")
+    allowed_service = {key for section, key in units.get("axionpanel", {}) if section == "Service"}
+    check(not {key for section, key in native if section == "Service"} - allowed_service,
+          "native panel: no unreviewed service directives")
+    check("insecure-loopback" not in nused, "native panel: no insecure-loopback")
+    check(native.get(("Unit", "After"), [""]) and "axionpanel-agent.service" in " ".join(native.get(("Unit", "After"), [])), "native panel: orders agent")
+    check("axionpanel-agent.service" in " ".join(native.get(("Unit", "Wants"), [])), "native panel: wants agent")
+    for flag, value in {
+        "addr": "192.0.2.10:8443",
+        "origin": "https://192.0.2.10:8443",
+        "tls-cert": "/etc/axionpanel/tls/panel.crt",
+        "tls-key": "/etc/axionpanel/tls/panel.key",
+        "entrance-file": "/var/lib/axionpanel/entrance",
+        "db": "/var/lib/axionpanel/panel.db",
+        "secret-key": "/var/lib/axionpanel/secret.key",
+        "agent-socket": "/run/axionpanel/agent.sock",
+    }.items():
+        check(bool(re.search(rf"(?:^|\s)-{flag}\s+{re.escape(value)}(?:\s|$)", ncommand)),
+              f"native panel: -{flag} {value}")
+    check("192.0.2.10" in ncommand and "192.0.2.10:8443" in ncommand, "native panel: documentation TEST-NET IP placeholder")
+    tls_dir = UNIT_DIR / "axionpanel-tls.tmpfiles.conf.example"
+    check(tls_dir.is_file(), "axionpanel-tls.tmpfiles.conf.example exists")
+    if tls_dir.is_file():
+        tls_lines = [l for l in tls_dir.read_text().splitlines() if l and not l.startswith(("#", ";"))]
+        check(len(tls_lines) == 1 and tls_lines[0].startswith("d /etc/axionpanel/tls 0750 root axionpanel -"),
+              "native tmpfiles: TLS directory exactly root:axionpanel 0750")
+    doc_native = REPO / "docs/native-tls-systemd.md"
+    check(doc_native.is_file(), "native-tls-systemd documentation exists")
+    if doc_native.is_file():
+        native_doc = doc_native.read_text()
+        for needle in ("TEST-NET", "192.0.2.10", "-init-tls", "chgrp axionpanel", "chmod 0640",
+                       "chown root:axionpanel", "umask 077", "runuser -u axionpanel",
+                       "-init-entrance", "-bootstrap-out", "/var/lib/axionpanel/bootstrap.json",
+                       "openssl x509 -noout -fingerprint -sha256", "systemd-analyze verify",
+                       "curl --cacert", "--insecure", "self-signed", "no firewall", "TEST-NET",
+                       "0750", "0640", "0600", "panel.crt", "panel.key", "axionpanel-native.service"):
+            check(needle in native_doc, f"native-tls-systemd docs: {needle}")
+        # The template must stay separate from the loopback unit and never
+        # claim a live deployment was performed.
+        check("not tested under PID1" in " ".join(native_doc.split()),
+              "native-tls-systemd docs: static-verification caveat")
+        check("does not open a public port" in native_doc or "does not open" in native_doc,
+              "native-tls-systemd docs: no public-port claim in the static template")
 policy = UNIT_DIR / "agent.toml.example"
 check(policy.is_file(), "owner-only policy example exists")
 if policy.is_file():
@@ -157,6 +236,35 @@ if len(units) == 2:
         print("systemd-analyze --root=<scratch> verify axionpanel.service axionpanel-agent.service")
         print(f"exit={result.returncode}; diagnostics={output or '(none)'}")
         check(result.returncode == 0 and not output, "systemd-analyze accepts both units without diagnostics")
+
+if native_path.is_file() and len(units) == 2:
+    # Separate root: the two panel profiles are alternatives and must not be
+    # installed as concurrent units. Static parsing still proves both names.
+    with tempfile.TemporaryDirectory(prefix="axionpanel-native-systemd-") as tmp:
+        root = Path(tmp)
+        unit_dir = root / "etc/systemd/system"
+        unit_dir.mkdir(parents=True)
+        (root / "etc/passwd").write_text("root:x:0:0:root:/root:/usr/sbin/nologin\n"
+                                         "axionpanel:x:999:999:AxionPanel:/var/lib/axionpanel:/usr/sbin/nologin\n")
+        (root / "etc/group").write_text("root:x:0:\naxionpanel:x:999:\n")
+        (root / "etc/nsswitch.conf").write_text("passwd: files\ngroup: files\n")
+        for target in ("sysinit", "basic", "shutdown", "multi-user", "network-online"):
+            (unit_dir / f"{target}.target").write_text(f"[Unit]\nDescription=Verification {target}\n")
+        (unit_dir / "axionpanel.service").write_text(native_path.read_text())
+        (unit_dir / "axionpanel-agent.service").write_text((UNIT_DIR / "axionpanel-agent.service").read_text())
+        for name in ("axionpanel", "axionpanel-agent"):
+            binary = root / f"usr/local/axionpanel/bin/{name}"
+            binary.parent.mkdir(parents=True, exist_ok=True)
+            binary.write_text("#!/bin/sh\nexit 1\n")
+            binary.chmod(0o755)
+        command = ["systemd-analyze", f"--root={root}", "verify",
+                   "axionpanel.service", "axionpanel-agent.service"]
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        output = (result.stdout + result.stderr).strip()
+        print("systemd-analyze --root=<scratch> verify native axionpanel.service axionpanel-agent.service")
+        print(f"exit={result.returncode}; diagnostics={output or '(none)'}")
+        check(result.returncode == 0 and not output,
+              "systemd-analyze accepts the native profile without diagnostics")
 
 print(f"{checks} assertions; {len(failures)} failures")
 sys.exit(bool(failures))
