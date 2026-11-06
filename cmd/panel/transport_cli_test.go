@@ -378,7 +378,7 @@ func TestTLSCLIInitRejectsBrowserNumericHostsBeforeState(t *testing.T) {
 		t.Run(tc.host, func(t *testing.T) {
 			dir := t.TempDir()
 			out, stderr, err := runTransportPanel(t, binary, dir,
-				"-init-tls", "-tls-host", tc.host, "-tls-cert", "cert", "-tls-key", "key", "-bootstrap-admin", "admin")
+				"-init-tls", "-tls-host", tc.host, "-tls-cert", "cert", "-tls-key", "key")
 			if err == nil || !strings.Contains(stderr, "-tls-host") || !strings.Contains(stderr, "browser IPv4") {
 				t.Errorf("numeric host needs actionable refusal: err=%v stdout=%s stderr=%s", err, out, stderr)
 			}
@@ -400,7 +400,7 @@ func TestTLSCLIInitRejectsMappedIPv6BeforeState(t *testing.T) {
 		t.Run(host, func(t *testing.T) {
 			dir := t.TempDir()
 			out, stderr, err := runTransportPanel(t, binary, dir,
-				"-init-tls", "-tls-host", host, "-tls-cert", "cert", "-tls-key", "key", "-bootstrap-admin", "admin")
+				"-init-tls", "-tls-host", host, "-tls-cert", "cert", "-tls-key", "key")
 			if err == nil || !strings.Contains(stderr, "IPv4-mapped IPv6") || !strings.Contains(stderr, "use IPv4 or native IPv6") {
 				t.Errorf("mapped init needs actionable refusal: err=%v stdout=%s stderr=%s", err, out, stderr)
 			}

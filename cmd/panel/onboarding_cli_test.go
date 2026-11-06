@@ -70,20 +70,28 @@ func TestOnboardingCLIInvalidFlagsLeaveNoState(t *testing.T) {
 		{"-bootstrap-out", "credentials.json"},
 		{"-bootstrap-admin", "admin", "-bootstrap-out", "credentials.json"},
 		{"-init-entrance"},
+		{"-init-entrance", "-entrance-file", "entrance", "-init-tls", "-tls-host", "127.0.0.1", "-tls-cert", "cert", "-tls-key", "key"},
+		{"-init-entrance", "-entrance-file", "entrance", "-tls-host", "127.0.0.1"},
+		{"-init-entrance", "-entrance-file", "entrance", "-tls-cert", "cert"},
+		{"-init-entrance", "-entrance-file", "entrance", "-tls-key", "key"},
 		{"-init-entrance", "-entrance-file", "entrance", "-bootstrap-admin", "admin"},
-		{"-init-tls", "-init-entrance", "-entrance-file", "entrance", "-tls-host", "127.0.0.1", "-tls-cert", "cert", "-tls-key", "key"},
+		{"-init-entrance", "-entrance-file", "entrance", "-bootstrap-admin", "admin", "-bootstrap-out", "credentials.json"},
+		{"-init-entrance", "-entrance-file", "entrance", "-insecure-loopback"},
 	}
-	for i, args := range cases {
-		t.Run(string(rune('A'+i)), func(t *testing.T) {
+	for _, args := range cases {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			dir := t.TempDir()
-			os.Chmod(dir, 0700)
+			if err := os.Chmod(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
 			_, _, err := runTransportPanel(t, binary, dir, args...)
 			if err == nil {
-				t.Fatal("invalid mode accepted")
+				t.Fatalf("invalid flags accepted: %v", args)
 			}
-			entries, _ := os.ReadDir(dir)
-			if len(entries) != 0 {
-				t.Fatal("invalid flags created files")
+			assertNoPanelState(t, dir)
+			entries, readErr := os.ReadDir(dir)
+			if readErr != nil || len(entries) != 0 {
+				t.Fatalf("invalid flags created files: %v, %v", entries, readErr)
 			}
 		})
 	}

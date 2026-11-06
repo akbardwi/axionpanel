@@ -55,6 +55,9 @@ func main() {
 		if *initTLS || *bootstrap != "" || *bootstrapOut != "" {
 			log.Fatalf("panel: -init-entrance cannot be combined with -init-tls or -bootstrap-admin")
 		}
+		if *tlsHost != "" || *tlsCert != "" || *tlsKey != "" || *insecureLoopback {
+			log.Fatalf("panel: -init-entrance cannot be combined with TLS or insecure-serving flags")
+		}
 		if *entranceFile == "" {
 			log.Fatalf("panel: -init-entrance requires -entrance-file")
 		}
@@ -75,6 +78,9 @@ func main() {
 	}
 
 	if *initTLS {
+		if *bootstrap != "" || *entranceFile != "" || *insecureLoopback {
+			log.Fatalf("panel: -init-tls cannot be combined with -bootstrap-admin, -entrance-file or -insecure-loopback")
+		}
 		if *tlsHost == "" {
 			log.Fatalf("panel: -init-tls requires -tls-host")
 		}
@@ -103,7 +109,17 @@ func main() {
 	}
 	var tlsConfig *tls.Config
 	if tlsEnabled {
-		tlsConfig, err = serverTLS(*addr, *origin, *tlsCert, *tlsKey)
+		if *bootstrap != "" {
+			// Bootstrap never listens. Retain origin/material validation without
+			// imposing a relationship with an unused serving address.
+			host, _, _, originErr := originAuthority(*origin)
+			if originErr != nil {
+				log.Fatalf("panel: %v", originErr)
+			}
+			tlsConfig, err = paneltls.Load(*tlsCert, *tlsKey, host, time.Now())
+		} else {
+			tlsConfig, err = serverTLS(*addr, *origin, *tlsCert, *tlsKey)
+		}
 		if err != nil {
 			log.Fatalf("panel: %v", err)
 		}

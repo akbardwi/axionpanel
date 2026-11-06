@@ -1,8 +1,14 @@
 package paneltls
 
 import (
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/asn1"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +17,10 @@ import (
 	"syscall"
 	"time"
 )
+
+// keyUsageOID identifies the X.509 KeyUsage extension. Its presence matters even
+// when every bit is clear: TLS 1.3 requires permission for digital signatures.
+var keyUsageOID = asn1.ObjectIdentifier{2, 5, 29, 15}
 
 // Load validates certificate/key inputs and origin hostname before any listener
 // starts. Regular symlink targets are allowed for package-managed certificates.
@@ -57,8 +67,48 @@ func Load(certPath, keyPath, host string, now time.Time) (*tls.Config, error) {
 			return nil, errors.New("TLS certificate does not permit server authentication")
 		}
 	}
+	if hasKeyUsageExtension(leaf) && leaf.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+		return nil, errors.New("TLS certificate key usage lacks digital signature permission required for TLS")
+	}
+	if err = checkPublicKey(leaf.PublicKey); err != nil {
+		return nil, err
+	}
 	pair.Leaf = leaf
 	return &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{pair}}, nil
+}
+
+func hasKeyUsageExtension(cert *x509.Certificate) bool {
+	for _, extension := range cert.Extensions {
+		if extension.Id.Equal(keyUsageOID) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkPublicKey mirrors Go crypto/tls's TLS 1.3 support (auth.go
+// signatureSchemesForPublicKey): P-256/P-384/P-521, RSA and Ed25519. It
+// also enforces the panel's 2048-bit RSA floor so weak imported material is
+// rejected before a configuration is returned.
+func checkPublicKey(pub crypto.PublicKey) error {
+	switch key := pub.(type) {
+	case *ecdsa.PublicKey:
+		switch key.Curve {
+		case elliptic.P256(), elliptic.P384(), elliptic.P521():
+			return nil
+		}
+		return fmt.Errorf("TLS certificate elliptic curve %s is unsupported for TLS 1.3; use P-256, P-384 or P-521", key.Curve.Params().Name)
+	case *rsa.PublicKey:
+		// 2048 bits is the panel's minimum RSA strength, not a Go TLS limit.
+		if key.N.BitLen() < 2048 {
+			return fmt.Errorf("TLS certificate RSA key is %d bits; at least 2048 bits are required", key.N.BitLen())
+		}
+		return nil
+	case ed25519.PublicKey:
+		return nil
+	default:
+		return fmt.Errorf("TLS certificate uses unsupported public key type %T; use ECDSA, RSA or Ed25519", pub)
+	}
 }
 
 // Nonblocking open plus fstat prevents FIFO hangs even if a path is swapped
