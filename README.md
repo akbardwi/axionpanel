@@ -20,12 +20,15 @@ work. Static UI references/prototypes are design artifacts with mock data.
 Implemented:
 - Native panel HTTPS with prevalidated certificate/key files and explicit
   self-signed IP/DNS initialization (`-init-tls`). Plain HTTP is loopback-only.
-  A static systemd profile and operator procedure exist; no installer or live
+  A static systemd profile and operator procedure exist; no host installer apply or live
   cutover yet. See [native HTTPS plan](docs/native-tls-plan.md) and the
   [manual systemd profile](docs/native-tls-systemd.md).
 - Agent foundation: peer-UID-checked Unix socket, strict request validation and
   four read-only operations (`system.info`, `system.stats`, `system.metrics`,
   `capabilities.refresh`). No host mutation yet; see [docs/agent.md](docs/agent.md).
+- Installer foundation: `--preflight-only`, `--verify-only` and authenticated
+  private staging via `install.sh`. The full host `--apply` step is not
+  implemented yet; see [installation status and limits](docs/installation.md).
 - Local host data in the panel: authenticated `GET /api/v1/system/{info,stats,metrics,agent}`
   proxied to the agent socket (`-agent-socket`, default
   `/run/axionpanel/agent.sock`). The Overview header and its four resource
@@ -43,7 +46,7 @@ Implemented:
   records from the read-only agent. See [audit coverage](internal/audit/README.md).
 
 Design only (not implemented):
-- Installer, automated direct-IP onboarding/live systemd migration, settings UI
+- Installer host apply, automated direct-IP onboarding/live systemd migration, settings UI
   and audit viewer ([installation plan](docs/installation-plan.md); manual
   [native-HTTPS systemd profile](docs/native-tls-systemd.md))
 - Full host dashboard, streaming metrics, services, terminal and logs
@@ -192,7 +195,7 @@ This is a development setup, not an installer or production deployment.
    Open `http://127.0.0.1:7800/`, or use an SSH tunnel forwarding local port
    7800 to server port 7800. `-insecure-loopback` disables Secure cookies only
    for an explicit HTTP loopback origin. Do not use it for public access.
-   Native TLS is implemented; the installer is not. Optional `-trusted-proxy`
+   Native TLS and installer verification/staging are implemented; host apply is not. Optional `-trusted-proxy`
    CIDRs enable client-IP handling behind a controlled reverse proxy; see
    [docs/public-access.md](docs/public-access.md) for the opt-in TLS setup.
    Setting `-origin` does not enable TLS. Auth and the Overview's existing
