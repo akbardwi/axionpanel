@@ -1,14 +1,18 @@
 # AxionPanel technical specification
 
-Status: draft v0.3, expanded MVP (Phase 1). Last updated 2026-11-05.
+Status: draft v0.3, expanded MVP (Phase 1). Last updated 2026-11-07.
 
 **Implementation boundary:** this is a design contract, not a feature inventory.
 The repository currently implements authentication/MFA/sudo, transactional auth
 audit, an embedded UI, authenticated read-only local telemetry, and a local agent
 with central policy enforcement and immutable operation discovery. Native panel
 TLS, explicit certificate initialization, optional secret entrance and protected
-first-admin bootstrap files are implemented. The installer, provisioning and
-workload management remain unimplemented.
+first-admin bootstrap files are implemented. Local static Nginx websites are
+implemented as an opt-in adapter: an agent flag and host-policy key enable four
+closed `site.*` operations on a prepared, isolated Nginx prefix, and the panel
+exposes authenticated list/plan/create/delete routes with durable job intent.
+PHP, Apache, TLS, DNS and file editing stay unimplemented. The installer,
+provisioning and workload management remain unimplemented.
 The contracts below include **DESIGN / NOT IMPLEMENTED** features, including
 remote enrollment/mTLS, containers/Compose, Git deploy, curated templates,
 backup/restore, Fail2ban monitoring and SSH public-key management. The initial
@@ -237,10 +241,12 @@ WebSocket upgrades require a valid session and a matching `Origin`.
   blocks `..` and symlink escapes. The agent derives the scope root from the
   system user's home directory; it never accepts a root path from the panel.
 - `agent.toml` holds policy the panel cannot change: `allow_root_terminal`,
-  `allow_root_files`, `allowed_services`. Every operation carries a startup
-  classification and is evaluated centrally; unclassified operations are
-  denied. No privileged operation is implemented yet: policy-permitted ones
-  still return `unsupported`. **DESIGN / NOT IMPLEMENTED:** add
+  `allow_root_files`, `allow_static_sites`, `allowed_services`. Every operation
+  carries a startup classification and is evaluated centrally; unclassified
+  operations are denied. Static sites require their dedicated policy permission
+  plus explicit adapter startup configuration; root-files or service grants do
+  not imply it. Other privileged operations remain unimplemented.
+  **DESIGN / NOT IMPLEMENTED:** add
   permitted managed users, container mount roots/security restrictions, build
   limits and explicit network target allowlists for Git, registries and S3.
   Panel requests cannot relax these host-local policies.
@@ -248,7 +254,9 @@ WebSocket upgrades require a valid session and a matching `Origin`.
   outcome, error code, kernel peer UID, request ID, actor, duration) to its
   log. No params, results, headers or raw error text are recorded. This is
   best-effort journal logging, not a durable tamper-evident sink; the closed
-  read-only catalog, not audit durability, bounds what the agent can do.
+  startup-selected catalog and policy bound what the agent can do. Static-site
+  mutation has a separate durable operation journal; audit logging is not a
+  substitute for that journal.
 - Each subsystem (nginx, each PHP-FPM version, cron file, firewall) has its own
   lock, so concurrent operations cannot interleave config writes.
 - **DESIGN / NOT IMPLEMENTED:** locks also cover each managed stack/release,
@@ -356,14 +364,18 @@ Errors use `{"error": {"code": "...", "message": "...", "details": {}}}`:
 
 ### 6.2 Operation design
 
-Configuration mutations are desired-state: the panel sends the full intended
-state and the agent converges to it. `site.apply` covers create, update and
-suspend. Not every mutation is safe to replay: builds, database dumps, restore,
+The implemented static-site adapter accepts only a DNS domain and, for
+mutation, a 32-lowercase-hex operation ID. `site.apply` creates an initial
+root-owned static site or returns a no-op for an unchanged managed site.
+`site.remove` removes only its vhost, never content. Update/suspend and richer
+desired-state payloads are **DESIGN / NOT IMPLEMENTED**. Not every mutation is safe to replay: builds, database dumps, restore,
 key rotation and destructive actions require explicit idempotency and durable
 result lookup, not blind retry (§9.8).
 
-**DESIGN / NOT IMPLEMENTED:** requests include a stable operation/job ID and
-idempotency key bound to host, actor, operation and parameter digest. Duplicate
+Implemented for local static sites: operation IDs are journaled with an
+action/domain/listener digest, terminal results are cached, and interrupted
+operations fail closed for manual reconciliation. General host/actor-bound
+idempotency remains **DESIGN / NOT IMPLEMENTED**. Duplicate
 keys return the existing job/result; a different digest is a conflict. Agents
 check current capabilities and local policy when executing, even if the panel's
 capability cache previously allowed the operation.
@@ -374,8 +386,9 @@ capability cache previously allowed the operation.
 |---|---|---|
 | `system.info`, `system.stats`, `system.metrics` | sync | |
 | `service.list`, `service.action` | sync | `start|stop|restart|reload`, names limited to `allowed_services` |
-| `site.apply` | async | system user, dirs, PHP-FPM pool, vhost, SSL binding, suspension |
-| `site.remove` | async | optional file removal |
+| `site.plan`, `site.status` | sync, opt-in | implemented: static plan and managed-file state; not a runtime health probe |
+| `site.apply` | sync, opt-in | implemented: initial root-owned static content and Nginx vhost only |
+| `site.remove` | sync, opt-in | implemented: managed vhost removal; content retained |
 | `php.versions` | sync | installed and installable versions |
 | `php.install` | async | from the configured package source |
 | `ssl.issue`, `ssl.renew` | async | ACME HTTP-01 |
@@ -545,11 +558,30 @@ multi-host selection stay **DESIGN / NOT IMPLEMENTED**.
 
 ### Sites and PHP
 
+Implemented local static-only routes (all under `/api/v1`):
+
+- `GET /sites` returns `{data: [], meta}` from SQLite (no sample rows).
+- `GET /sites/plan?domain=` returns `{domain,vhost,root,listen,applied,would_do}`.
+- `GET /sites/{id}` returns a static site record, including removed tombstones.
+- `POST /sites` accepts `{domain}` and returns `{site,job,mode:"synchronous"}`.
+- `DELETE /sites/{id}` accepts `{confirm_domain}` and returns
+  `{site,job,retained_content,mode:"synchronous"}`. A `delete_files` option is
+  forbidden: this slice never deletes content or silently adopts retained data.
+- `GET /jobs/{id}` returns a local static job, scoped to its actor or an admin.
+
+Reads require a session; mutations require exact Origin, CSRF, active admin and
+fresh sudo, revalidated in the durable intent transaction. Local server ID 1 is
+the only supported host. Mutations commit job/site/domain/audit intent before
+dispatch, then record the terminal outcome. A response with HTTP 200 contains the
+job result; clients must inspect `job.status`, not infer success from HTTP alone.
+Unfinished jobs at startup are marked failed/manual-reconciliation without replay.
+A status of `active` means configuration applied, not an HTTP health guarantee.
+
+Remaining website/PHP routes below are **DESIGN / NOT IMPLEMENTED**:
+
 | Endpoint | Notes |
 |---|---|
-| `GET /sites`, `POST /sites` | create is async |
-| `GET /sites/{id}`, `PATCH /sites/{id}` | update is async |
-| `DELETE /sites/{id}?delete_files=true` | async |
+| `PATCH /sites/{id}` | richer update not available |
 | `POST /sites/{id}/suspend`, `POST /sites/{id}/unsuspend` | async |
 | `POST /sites/{id}/domains`, `DELETE /sites/{id}/domains/{domain_id}` | async |
 | `GET /sites/{id}/logs/{access|error}?lines=200` | |
@@ -682,7 +714,7 @@ schema support is not evidence that a backend feature is wired or functional.
 | `databases`, `database_users`, `database_grants` | database metadata |
 | `cron_jobs` | scheduled commands; NULL system user means root (admin only) |
 | `firewall_rules` | desired firewall rules; `is_system` rules cannot be deleted |
-| `jobs` | async job tracking (ULID ids) |
+| `jobs` | job tracking; implemented synchronous static-site jobs use 32 lowercase hex IDs |
 | `audit_log` | append-only record of who did what |
 | `settings` | runtime settings as JSON values |
 
@@ -755,6 +787,26 @@ Every generated file is written the same way:
 
 ### 9.2 Site apply sequence
 
+**Implemented static exception:** see [static-sites-plan.md](static-sites-plan.md)
+and `internal/nginxsite/README.md`. No OS user, PHP pool, TLS or writable upload
+area is created. Trusted startup configuration supplies all paths and the fixed
+listener. The agent validates the baseline, journals intent, publishes managed
+vhost configuration atomically, tests and signals the dedicated Nginx instance.
+Every mutation then verifies the resulting state with a bounded HTTP probe of
+the configured listener, not merely the reload signal: a zero-signal apply, an
+occupied listener or a foreign/redirecting response is not serving, and an
+undetermined response fails closed. A removed last vhost may refuse connections;
+that is the only accepted absence proof, and other managed vhosts must still
+answer. Pinned roots, managed files and their ancestors are revalidated at each
+operation boundary, and operations serialize across processes and within the
+process without ignoring their deadlines. Rollback failures or interrupted
+records require manual reconciliation. Removal
+retains content and the panel keeps the domain tombstone. Requests never supply
+paths, port numbers, executable names or Nginx snippets. This adapter does not
+install, start or adopt the host's existing Nginx instance.
+
+The full provisioning sequence below is **DESIGN / NOT IMPLEMENTED**:
+
 1. The panel validates input, inserts the site with `status=provisioning`,
    creates a job, and calls `site.apply`.
 2. The agent creates the group and system user if missing: shell
@@ -769,6 +821,9 @@ cut to 28 characters. Collisions get a numeric suffix. The result never
 exceeds 32 characters.
 
 ### 9.3 Permissions
+
+The ownership model below is **DESIGN / NOT IMPLEMENTED**. The initial static
+adapter instead creates root-owned readable content, without a site OS user.
 
 Each site has its own user and group with the same name. `www-data` is added
 to every site group so Nginx can read static files.

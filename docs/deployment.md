@@ -44,11 +44,29 @@ canonical dispatch path: each registered operation carries a startup
 classification, and an unclassified operation is denied even if registered.
 `read_only` operations always run; `root_terminal`, `root_files`, and
 `service:*` operations are denied unless the matching policy key allows them.
-Today no generic exec, terminal, file, or host mutation operation is registered,
-so no policy setting can enable one; an allowed-but-unimplemented privileged
-operation returns `unsupported`, not a shell. Only `system.info`,
-`system.stats`, `system.metrics`, and `capabilities.refresh` are registered. Tool detection is
+There is no generic exec API. Terminal, file and service handlers remain
+unsupported even when policy allows their classifications: dispatch returns
+`unsupported`, not a shell.
+Only `system.info`, `system.stats`, `system.metrics`, and `capabilities.refresh`
+are registered **by default and by these unit templates**. Tool detection is
 PATH lookup only, never tool execution or permission to manage that tool.
+
+The separate static HTTP Nginx adapter can add `site.plan`, `site.apply`,
+`site.remove` and `site.status`, all classified `static_sites`. It requires
+`-static-sites`, all seven trusted startup options (`-site-state-dir`,
+`-site-content-dir`, `-site-config-dir`, `-nginx-binary`, `-nginx-config`,
+`-nginx-prefix`, `-site-listen`) and `allow_static_sites = true`. Root-file or
+service policy grants do not authorize it. Its durable private operation journal
+is separate from best-effort request logs. See [agent.md](agent.md) for exact
+parameter validation, budgets and scope, and
+[static-sites-plan.md](static-sites-plan.md) for integration/review gates.
+
+**Do not simply add these flags to the units below.** They deliberately retain
+the read-only sandbox and do not prepare an isolated Nginx instance, writable
+managed roots or a reviewed reload privilege boundary. Static sites need a
+separate operator-reviewed profile. Nothing here installs, starts or adopts an
+existing host Nginx instance; this is not a static-site deployment, release or
+final readiness claim.
 
 ## Manual preparation (not performed by this guide)
 
@@ -198,14 +216,16 @@ that long-running requests drain correctly under systemd. `Restart=on-failure`
 does not override an explicit systemctl stop. Failed startups are rate-limited
 to 3 attempts/60 seconds; inspect failures before using `systemctl reset-failed`.
 
-Hardening fits the read-only foundation, **not future host mutations**:
+Hardening fits the read-only foundation, **not the opt-in static-site adapter
+or future host mutations**:
 
 - `ProtectSystem=strict`, `ProtectHome=yes`, private devices/tmp, no new
   privileges, no namespace creation, no realtime scheduling or SUID/SGID file
   creation. Kernel tunables, modules, logs, clock and control groups protected.
 - Panel capability set empty. Agent retains only `CAP_CHOWN` for socket metadata;
-  it runs as root but has no generic command execution API. Future operations
-  need a new privilege/sandbox review, not blanket removal of these limits.
+  it runs as root but has no generic command execution API. Opt-in static sites
+  and future operations need a separate privilege/sandbox review, not blanket
+  removal of these limits.
 - Agent accepts only `AF_UNIX`; panel permits Unix sockets and IPv4/IPv6 for
   loopback TCP. Address-family limits do not themselves constrain TCP addresses;
   the explicit `-addr 127.0.0.1:7800` does that.

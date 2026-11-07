@@ -128,7 +128,7 @@ const nav = [
     </div>
     <div class="flex items-center gap-3">
       <span v-if="preview" class="ax-pill ax-pill-warn hidden md:inline-flex" title="No server operations are executed in this design preview.">DESIGN PREVIEW</span>
-      <span v-else class="ax-pill ax-pill-warn hidden md:inline-flex" title="Sign-in is real. Overview metrics read the local agent; other feature screens and controls are samples.">SAMPLE SCREENS</span>
+      <span v-else class="ax-pill ax-pill-warn hidden md:inline-flex" title="Sign-in, Overview metrics and local static Websites are live. The remaining feature screens and controls are samples.">LIVE · SAMPLE SCREENS</span>
       <span class="ax-pill hidden lg:inline-flex" :class="hostLive ? 'ax-pill-ok' : 'ax-pill-dim'">Host link: {{ hostLive ? 'live' : 'unavailable' }}</span>
       <button class="ax-btn ax-btn-ghost" title="Toggle theme" @click="toggleTheme">
         <span aria-hidden="true" class="material-symbols-outlined text-base">{{ dark ? 'light_mode' : 'dark_mode' }}</span>{{ dark ? 'Light' : 'Dark' }}
@@ -148,7 +148,7 @@ const nav = [
   <div :class="isLogin ? '' : 'lg:pl-72'">
     <div class="design-banner px-6 py-2 text-[11px] border-b" :style="{ background: 'rgb(var(--c-surface-container-lowest) / .5)', borderColor: 'rgb(var(--c-outline-variant) / .2)', color: 'rgb(var(--c-outline))' }" v-if="!isLogin">
       <template v-if="preview">Design preview — no server operations are executed. All values are example data.</template>
-      <template v-else>Live metrics on Overview use read-only values from the local agent. Sample screens and other controls use example data; no host changes are performed.</template>
+      <template v-else>Live metrics on Overview use read-only values from the local agent. Local static Websites make opt-in host changes only. Sample screens and remaining controls use example data and perform no host changes.</template>
     </div>
     <router-view @signed-in="$router.push('/overview')" />
   </div>

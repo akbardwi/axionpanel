@@ -26,5 +26,6 @@ test('shell banner names the live metrics without claiming other screens are liv
   assert.match(banner, /Live metrics/i)
   assert.match(banner, /read-only/i)
   assert.match(banner, /Sample screens/i)
+  assert.match(banner, /Local static Websites make opt-in host changes/i)
   assert.doesNotMatch(banner, /Host data \(live\)/)
 })

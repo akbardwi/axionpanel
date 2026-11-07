@@ -3,18 +3,24 @@
 The AxionPanel **agent** is the privileged host daemon. The **panel** is the
 unprivileged web/API process. The agent runs only the operations in a closed
 registry and accepts requests only over a Unix socket whose peer UID the kernel
-reports. This document is the operational reference for the foundation
-implemented so far; the full protocol is specified in `docs/spec.md` §6.
+reports. This document describes the current default foundation and opt-in
+static-site configuration; the full protocol is specified in `docs/spec.md` §6.
 
 ## Status
 
-Implemented and tested: socket transport, peer-UID gate, strict request
-envelope, four read-only operations, a host policy loader, central policy
-enforcement, and fixed-shape request audit records. Not yet
-implemented: any mutating operation, remote mTLS transport, jobs/stats/terminal
-endpoints and an installer. Manual systemd templates and deployment checks
-are documented in [deployment.md](deployment.md). The local public test
-installation is not a cross-distribution sandbox certification.
+The default startup catalog contains four read-only operations, with socket
+transport, a peer-UID gate, strict request validation, host policy enforcement
+and fixed-shape request audit records. A separate opt-in static HTTP Nginx
+adapter registers `site.plan`, `site.apply`, `site.remove` and `site.status`.
+Integration and review of that slice are in progress; this document is not a
+release, deployment or final readiness claim. See
+[static-sites-plan.md](static-sites-plan.md) for scope and acceptance gates.
+
+Remote mTLS transport, agent jobs/stats-stream/terminal endpoints and general
+host mutation remain unimplemented. Installer preflight/verification/staging
+exist, but host apply does not. Manual systemd templates and deployment checks
+are documented in [deployment.md](deployment.md); those templates retain the
+read-only default and are not a static-site deployment profile.
 
 ## Threat model
 
@@ -72,6 +78,32 @@ axionpanel-agent \
   oversized policy file is fatal (fail closed).
 - `-version` — print the stamped version and exit.
 
+### Static-site opt-in
+
+Without `-static-sites`, only the four built-in read-only operations are
+registered. Setting any static-site option without that opt-in is a startup
+error. Enabling it requires **all seven** options below plus
+`allow_static_sites = true` in the host policy; missing configuration or policy
+fails startup, rather than falling back to an unmanaged host Nginx instance.
+
+| Flag | Trusted startup value |
+|---|---|
+| `-site-state-dir` | private root-only journal and lock directory |
+| `-site-content-dir` | managed static content root |
+| `-site-config-dir` | managed vhost configuration directory |
+| `-nginx-binary` | absolute path to the trusted Nginx executable |
+| `-nginx-config` | absolute path to the prepared isolated main configuration |
+| `-nginx-prefix` | dedicated Nginx `-p` prefix directory |
+| `-site-listen` | fixed literal `ip:port` listener |
+
+These are operator-selected values, never request parameters. Prepare and
+review the isolated Nginx instance and safe root-owned directories separately;
+this opt-in does not install, start or adopt an existing hosting stack, open
+ports, or enable workload TLS. The supplied read-only systemd sandbox is not a
+static-site profile: it needs a separate privilege/writable-path review, not
+blanket hardening removal. No generic root-file or service grant substitutes
+for this dedicated permission.
+
 Exit codes: clean `SIGTERM`/`SIGINT` shutdown exits `0`.
 
 ## Protocol (implemented subset)
@@ -100,7 +132,7 @@ returned only as `internal` with a generic message.
 On `SIGTERM`/`SIGINT` the agent stops accepting connections and lets in-flight
 requests finish for up to 5 seconds, then force-closes what remains.
 
-## Operations (implemented, read-only)
+## Operations (default, read-only)
 
 | Operation | Result |
 |---|---|
@@ -121,19 +153,46 @@ managed feature (`php`, `database`, `firewall`, `docker`, `compose`,
 `build_sandbox`, `backup`, `fail2ban`, `ssh`, `systemd`) currently reports
 `available: false, reason: "unimplemented"`.
 
+### Static-site operations (opt-in)
+
+All four use the dedicated `static_sites` classification and require
+`allow_static_sites = true`, including the non-mutating plan/status calls.
+The actual `/v1/info` operation catalog is authoritative for the running agent.
+
+| Operation | Parameters | Scope |
+|---|---|---|
+| `site.plan` | `domain` | preview derived paths and the fixed listener, without mutation |
+| `site.status` | `domain` | managed-file state, not a runtime health probe |
+| `site.apply` | `domain`, `operation_id` | initial root-owned static content and managed vhost |
+| `site.remove` | `domain`, `operation_id` | remove only the managed vhost; retain content |
+
+Parameter keys are validated against an exact, case-sensitive allowlist before
+struct decoding: `DOMAIN`, `Domain`, paths, ports, snippets, extra fields and
+duplicate keys are rejected. The domain must already be a lowercase ASCII DNS
+hostname (at least two labels, no wildcard, IP literal or trailing dot).
+Mutation IDs must be exactly 32 lowercase hexadecimal characters. Plan/status
+do not accept `operation_id`; status/apply/remove require a live context deadline.
+The adapter revalidates input independently. Retained content cannot be silently
+adopted by a later create. No user accounts, writable uploads, PHP, Apache,
+reverse proxy, workload TLS or general file-management API are included.
+
+For synchronous create/remove, the panel dispatch budget is **90 s**, the
+panel's site agent-client ceiling **95 s**, and the opt-in agent's HTTP operation
+deadline **100 s** for `site.apply`/`site.remove`. Both panel and agent HTTP write
+timeouts are **120 s**, leaving response/persistence headroom. Other agent
+operations keep the **60 s** default; the longer mutation budget does not widen
+read-only calls. Shutdown still has the shorter drain window described above;
+a timeout, restart or lost response is not proof of rollback and requires
+reconciliation rather than blind replay.
+
 ## Policy
 
 `agent.toml` is a restricted flat key-value subset (no tables, no escapes, no
-dotted keys). The only recognised keys today are `allow_root_terminal`,
-`allow_root_files` (booleans), and `allowed_services` (string array), matching
+dotted keys). Recognised keys are `allow_root_terminal`, `allow_root_files`,
+`allow_static_sites` (booleans), and `allowed_services` (string array), matching
 `docs/spec.md` §5.3. Loader rules: regular file, owner equals the agent euid,
 no group or world permission bits (`0600` recommended; `0400` also accepted), opened `O_NOFOLLOW` and read bounded to 64 KiB after an `fstat` on
 the held descriptor.
-
-Known gap for future parameterized operations: Go's `encoding/json` matches
-struct fields case-insensitively, so `name` and `NAME` decode into the same
-field. The duplicate-key check catches exact repeats only. Before adding an
-operation with parameters, decode case-sensitively or validate against a schema.
 
 ### Enforcement
 
@@ -142,7 +201,7 @@ Policy is enforced in one place: `Server.dispatch`, the canonical path shared by
 run without passing it.
 
 - Every registration carries exactly one permission at startup: `read_only`,
-  `root_terminal`, `root_files`, or `service:<target>`. Registering an unknown
+  `root_terminal`, `root_files`, `static_sites`, or `service:<target>`. Registering an unknown
   permission, more than one permission, or an invalid service target panics at
   startup. A registration with no permission is accepted but is denied at
   execution (`forbidden_by_policy`), so an unclassified operation can never run.
@@ -158,17 +217,21 @@ run without passing it.
 - Unknown operations stay `not_found` (404). A known but unclassified operation
   is `forbidden_by_policy` (403).
 
-### Privileged operations are not enabled
+### Narrow static-site exception; generic privileged operations unsupported
 
-No mutating operation exists yet, and policy permission alone is not enough to
-run one. `Logger` is a best-effort journald writer with no success or error
-result, so it cannot prove that a mutation was durably audited before it
-executed. Until a checked durable sink exists, every policy-permitted
-non-`read_only` permission returns `unsupported` (501) and the handler is never
-called. Policy-denied requests still return `forbidden_by_policy` (403). Even
-when policy allows it, no privileged handler executes. This is fail-closed: a
-broken or panicking logger cannot silently permit a future mutation. No generic
-shell, file or service execution is auto-authorized.
+Policy permission alone does not enable a handler. The startup-selected
+`static_sites` adapter is the only non-`read_only` exception: it uses a separate
+private durable operation journal for identity, digest and recovery state before
+mutation. That journal is distinct from the best-effort request logger. Pending
+or ambiguous outcomes require manual reconciliation, not automatic replay; an
+operation ID reused with different input conflicts.
+
+`root_terminal`, `root_files` and `service:<target>` remain unsupported even
+when their policy keys allow them: dispatch returns `unsupported` (501) without
+calling those handlers. Policy denial still returns `forbidden_by_policy` (403).
+No generic shell, file or service execution is auto-authorized, and those grants
+do not authorize `site.*`. A broken request logger is not treated as durable
+mutation evidence.
 
 ### Audit
 
@@ -207,4 +270,6 @@ curl -sS --unix-socket /run/axionpanel/agent.sock \
   http://unix/v1/info
 ```
 
-No installer or systemd unit exists yet; this is manual groundwork.
+Manual systemd templates exist in `deploy/systemd/`; they keep static sites
+disabled. Installer host apply remains unavailable. This development example
+does not prepare or enable the separate static-site adapter.

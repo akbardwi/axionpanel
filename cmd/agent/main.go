@@ -54,6 +54,14 @@ func run(ctx context.Context, args []string) error {
 	allowUID := fs.String("allow-uid", "", "required: panel user name or numeric UID")
 	socketGID := fs.String("socket-gid", "", "required: panel group name or numeric GID")
 	showVersion := fs.Bool("version", false, "print version and exit")
+	staticSites := fs.Bool("static-sites", false, "opt in to journal-backed static nginx sites (requires every --site-* and --nginx-* flag plus allow_static_sites policy)")
+	siteStateDir := fs.String("site-state-dir", "", "private root-only journal/lock directory for static sites")
+	siteContentDir := fs.String("site-content-dir", "", "managed static content root")
+	siteConfigDir := fs.String("site-config-dir", "", "managed vhost config directory")
+	nginxBinary := fs.String("nginx-binary", "", "absolute path to the trusted nginx binary")
+	nginxConfig := fs.String("nginx-config", "", "absolute path to the isolated nginx main config")
+	nginxPrefix := fs.String("nginx-prefix", "", "nginx -p prefix directory")
+	siteListen := fs.String("site-listen", "", "literal ip:port static sites listen on")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -105,13 +113,30 @@ func run(ctx context.Context, args []string) error {
 
 	registry := agent.NewRegistry()
 	agent.RegisterBuiltins(registry)
+	backend, err := configureRegistry(registry, policy, siteOptions{
+		Enable:      *staticSites,
+		StateDir:    *siteStateDir,
+		ContentDir:  *siteContentDir,
+		ConfigDir:   *siteConfigDir,
+		NginxBinary: *nginxBinary,
+		NginxConfig: *nginxConfig,
+		NginxPrefix: *nginxPrefix,
+		Listen:      *siteListen,
+	})
+	if err != nil {
+		return fmt.Errorf("static sites: %w", err)
+	}
 	srv := &agent.Server{
-		Registry:   registry,
-		Policy:     policy,
-		Socket:     *socket,
-		SocketGID:  gid,
-		AllowedUID: uid,
-		Logger:     log.Printf,
+		Registry:           registry,
+		Policy:             policy,
+		Socket:             *socket,
+		SocketGID:          gid,
+		AllowedUID:         uid,
+		StaticSitesTimeout: staticSitesHTTPTimeout(backend != nil),
+		Logger:             log.Printf,
+	}
+	if backend != nil {
+		defer backend.Close()
 	}
 
 	ln, err := srv.Listen(ctx)

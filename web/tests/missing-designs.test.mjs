@@ -52,10 +52,11 @@ test('Databases creates databases/users and previews explicit grants', () => {
   p.tab.value = 'users'; p.form.name = 'reader'; p.createResource(); assert.equal(p.users.value.length, 3);
   p.grant.user = 'reader'; p.grant.database = 'new_db'; p.saveGrant(); assert.match(p.feedback.value, /Preview only/);
 });
-test('Websites validates, creates examples, filters and toggles safely', () => {
-  const p = load('Websites', 'sites,form,error,createSite,query,filtered,toggleSite');
-  p.form.domain = 'bad domain'; p.createSite(); assert.ok(p.error.value);
-  p.form.domain = 'new.example.com'; p.createSite(); assert.equal(p.sites.value.length, 4);
-  p.query.value = 'new.example'; assert.equal(p.filtered.value.length, 1);
-  p.toggleSite(p.filtered.value[0]); assert.equal(p.filtered.value[0].status, 'Paused');
+test('Websites uses the live inventory workflow, not simulated preview mutations', () => {
+  const source = readFileSync(new URL('WebsitesView.vue', root), 'utf8');
+  assert.match(source, /createSitesWorkflow/);
+  assert.doesNotMatch(source, /Preview only|toggleSite|createSite\(/i);
+  // Runtime request/result and confirmation behavior is covered by sites-*.test.mjs.
 });
+// Websites has graduated from design preview to the real local static API.
+// Remaining views intentionally retain their isolated preview-only tests.

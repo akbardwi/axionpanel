@@ -15,6 +15,121 @@ import (
 	"axionpanel/internal/agent"
 )
 
+func TestRunStaticSitesFlagsRejectMissingConfiguration(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, extra := range [][]string{{"--static-sites"}, {"--site-state-dir", "/missing"}} {
+		args := append([]string{"--allow-uid", "1000", "--socket-gid", "1000", "--policy", ""}, extra...)
+		err := run(ctx, args)
+		if err == nil || errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "flag provided but not defined") {
+			t.Fatalf("args=%v err=%v", args, err)
+		}
+	}
+}
+
+func TestStaticSitesDisabledByDefault(t *testing.T) {
+	reg := agent.NewRegistry()
+	backend, err := configureRegistry(reg, agent.Policy{}, siteOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backend != nil {
+		t.Fatal("static sites enabled without opt-in")
+	}
+	for _, name := range []string{"site.plan", "site.apply", "site.remove", "site.status"} {
+		if reg.Has(name) {
+			t.Fatal("unopted-in site operation registered:", name)
+		}
+	}
+}
+
+func TestStaticSitesRejectsIncompleteOptIn(t *testing.T) {
+	full := siteOptions{
+		Enable:      true,
+		StateDir:    "/var/lib/axionpanel/sitestate",
+		ContentDir:  "/var/lib/axionpanel/sitecontent",
+		ConfigDir:   "/etc/axionpanel/sitetarget",
+		NginxBinary: "/usr/sbin/nginx",
+		NginxConfig: "/etc/axionpanel/nginx-site.conf",
+		NginxPrefix: "/var/lib/axionpanel/siteprefix",
+		Listen:      "127.0.0.1:8081",
+	}
+	names := []string{"state", "content", "config", "binary", "nginx", "prefix", "listen"}
+	flags := []string{"--site-state-dir", "--site-content-dir", "--site-config-dir", "--nginx-binary", "--nginx-config", "--nginx-prefix", "--site-listen"}
+	for i, field := range names {
+		o := full
+		zero(&o, field)
+		_, err := configureRegistry(agent.NewRegistry(), agent.Policy{AllowStaticSites: true}, o)
+		if err == nil || !strings.Contains(err.Error(), flags[i]) {
+			t.Fatalf("field %s err=%v", field, err)
+		}
+	}
+	_, err := configureRegistry(agent.NewRegistry(), agent.Policy{}, full)
+	if err == nil || !strings.Contains(err.Error(), "allow_static_sites") {
+		t.Fatal("incomplete policy accepted:", err)
+	}
+	o := full
+	o.Enable = false
+	_, err = configureRegistry(agent.NewRegistry(), agent.Policy{AllowStaticSites: true}, o)
+	if err == nil || !strings.Contains(err.Error(), "--static-sites") {
+		t.Fatal("disabled with config accepted:", err)
+	}
+}
+
+func zero(o *siteOptions, field string) {
+	switch field {
+	case "state":
+		o.StateDir = ""
+	case "content":
+		o.ContentDir = ""
+	case "config":
+		o.ConfigDir = ""
+	case "binary":
+		o.NginxBinary = ""
+	case "nginx":
+		o.NginxConfig = ""
+	case "prefix":
+		o.NginxPrefix = ""
+	case "listen":
+		o.Listen = ""
+	}
+}
+
+func TestStaticSitesEnabledRegistersRealManager(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("real manager requires root-owned trusted inputs")
+	}
+	base, err := os.MkdirTemp("/root/.hermes/cache/scratch", "agent-sites-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(base)
+	o := siteOptions{Enable: true, StateDir: filepath.Join(base, "state"), ContentDir: filepath.Join(base, "content"), ConfigDir: filepath.Join(base, "conf"), NginxBinary: filepath.Join(base, "nginx"), NginxConfig: filepath.Join(base, "nginx.conf"), NginxPrefix: filepath.Join(base, "prefix"), Listen: "127.0.0.1:18081"}
+	for _, dir := range []string{o.StateDir, o.ContentDir, o.ConfigDir, o.NginxPrefix} {
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(o.NginxBinary, []byte("not executed by startup"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(o.NginxConfig, []byte("not executed by startup"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	reg := agent.NewRegistry()
+	backend, err := configureRegistry(reg, agent.Policy{AllowStaticSites: true}, o)
+	if err == nil {
+		defer backend.Close()
+	}
+	if err != nil || backend == nil {
+		t.Fatalf("backend=%v err=%v", backend, err)
+	}
+	for _, name := range []string{"site.plan", "site.apply", "site.remove", "site.status"} {
+		if !reg.Has(name) {
+			t.Fatal("missing operation:", name)
+		}
+	}
+}
 func TestRunRequiresExplicitNonRootIdentity(t *testing.T) {
 	for _, args := range [][]string{nil, {"--allow-uid", "1000"}, {"--socket-gid", "1000"}, {"--allow-uid", "0", "--socket-gid", "1000"}, {"--allow-uid", "root", "--socket-gid", "1000"}, {"--allow-uid", "1000", "--socket-gid", "0"}, {"--allow-uid", "1000", "--socket-gid", "1000", "extra"}, {"--allow-uid", "1000", "--socket-gid", "1000", "--listen", "127.0.0.1:0"}} {
 		ctx, cancel := context.WithCancel(context.Background())

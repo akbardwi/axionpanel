@@ -80,7 +80,7 @@ test('protected views redirect login; password-only login shows real identity; l
   await expect(page).toHaveURL(/\/overview$/)
   await expect(page.locator('header')).toContainText('ada')
   await expect(page.locator('header')).toContainText('operator')
-  await expect(page.getByText('SAMPLE SCREENS', { exact: true })).toBeVisible()
+  await expect(page.getByText('LIVE · SAMPLE SCREENS', { exact: true })).toBeVisible()
   await page.reload()
   await expect(page.locator('header')).toContainText('ada')
   await context.addCookies([{ name: 'axp_csrf', value: 'live-cookie', url: 'http://127.0.0.1:15175', sameSite: 'Strict' }])
@@ -348,7 +348,7 @@ test('shell labels live Overview metrics separately from sample controls', async
   await expect(banner).toContainText(/screens.*example/i)
   await expect(banner).not.toContainText('All values are example data')
   await expect(banner).not.toContainText('No server operations are executed')
-  await expect(page.getByText('SAMPLE SCREENS', { exact: true })).toHaveAttribute('title', /Overview metrics.*local agent.*other.*screens/i)
+  await expect(page.getByText('LIVE · SAMPLE SCREENS', { exact: true })).toHaveAttribute('title', /Sign-in.*Overview metrics.*local static Websites.*remaining.*samples/i)
   await expect(page.getByText('Host link: Nominal', { exact: true })).toHaveCount(0)
 })
 

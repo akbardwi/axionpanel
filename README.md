@@ -5,13 +5,16 @@ managing a local server and multiple enrolled hosts from one dashboard, with a
 path to multi-user hosting later. The license is still undecided; the project
 is not yet open source by definition.
 
-**Status: pre-alpha — working authentication, native HTTPS, embedded UI and read-only local host data; management features remain design-only.**
+**Status: pre-alpha — authentication, native HTTPS, embedded UI, local host telemetry and opt-in static Nginx websites; other management features remain design-only.**
 
 The panel binary now serves the embedded Vue UI and a real authentication
 backend: password login, TOTP 2FA with single-use recovery codes, hashed
 sessions, sudo re-authentication, and CSRF/Origin enforcement (see
-`docs/spec.md` §5.1). Everything else — websites, databases, SSL, files, cron,
-containers, deploy, backups, multi-node — remains **DESIGN / NOT IMPLEMENTED**.
+`docs/spec.md` §5.1). A narrow local static HTTP website workflow is implemented
+but disabled by default; it requires a prepared isolated Nginx instance and
+explicit agent configuration plus host policy. PHP/Apache/reverse-proxy websites,
+workload TLS, databases, files, cron, containers, deploy, backups and multi-node
+remain **DESIGN / NOT IMPLEMENTED**.
 The MVP features below are design contracts, not evidence that their actions
 work. Static UI references/prototypes are design artifacts with mock data.
 
@@ -25,7 +28,8 @@ Implemented:
   [manual systemd profile](docs/native-tls-systemd.md).
 - Agent foundation: peer-UID-checked Unix socket, strict request validation and
   four read-only operations (`system.info`, `system.stats`, `system.metrics`,
-  `capabilities.refresh`). No host mutation yet; see [docs/agent.md](docs/agent.md).
+  `capabilities.refresh`) by default. Four closed `site.*` operations can be
+  registered explicitly; see [docs/agent.md](docs/agent.md).
 - Installer foundation: `--preflight-only`, `--verify-only` and authenticated
   private staging via `install.sh`. The full host `--apply` step is not
   implemented yet; see [installation status and limits](docs/installation.md).
@@ -40,7 +44,12 @@ Implemented:
   failed-login lockout and per-IP/per-username throttling. Password rotation
   via API requires fresh sudo and revokes all sessions.
 - Host policy: central deny-by-default classification for every agent operation;
-  no mutating handlers execute, even when policy permits their classification.
+  static websites require dedicated `allow_static_sites` permission and startup
+  opt-in. Generic filesystem/service permissions do not authorize them.
+- Local static Nginx websites: real inventory, plan, create and confirmed vhost
+  removal with retained content, durable jobs and audit intent, and fresh sudo.
+  No service adoption, hosting-stack installation or automatic recovery replay.
+  See [static-site scope and safety gates](docs/static-sites-plan.md).
 - Security audit: typed durable SQLite events for auth state changes, with
   transactional rollback on audit failure; separate best-effort JSON request
   records from the read-only agent. See [audit coverage](internal/audit/README.md).
@@ -50,7 +59,7 @@ Design only (not implemented):
   and audit viewer ([installation plan](docs/installation-plan.md); manual
   [native-HTTPS systemd profile](docs/native-tls-systemd.md))
 - Full host dashboard, streaming metrics, services, terminal and logs
-- Nginx/Apache websites (PHP-FPM, static, reverse proxy), explicit coexistence
+- PHP-FPM/reverse-proxy Nginx and Apache websites, explicit coexistence
   profiles, Let's Encrypt/custom SSL
 - MariaDB-first native database/user management, file manager and cron
 - nftables firewall with confirm-or-revert, SSH settings/public-key management,
@@ -127,7 +136,7 @@ gates. Distributed scheduling/consensus/HA is not promised by the multi-node UI.
 
 ```
 cmd/panel/     Panel entrypoint (API server + embedded UI + auth)
-cmd/agent/     Agent entrypoint (Unix socket, read-only ops; see docs/agent.md)
+cmd/agent/     Agent entrypoint (Unix socket, read-only + opt-in site ops)
 internal/      Store/migrations, auth, secret, totp, webui, agent,
                agentclient (panel→agent), systemapi (/api/v1/system/*)
 internal/secret/  AES-256-GCM envelope for encrypted fields
@@ -199,7 +208,8 @@ This is a development setup, not an installer or production deployment.
    CIDRs enable client-IP handling behind a controlled reverse proxy; see
    [docs/public-access.md](docs/public-access.md) for the opt-in TLS setup.
    Setting `-origin` does not enable TLS. Auth and the Overview's existing
-   resource cards display real host data; other host controls remain sample UI.
+   resource cards display real host data. Websites uses the real local static
+   API (mutations require agent opt-in); other host controls remain sample UI.
    Without a running agent the cards report unavailable instead of values.
    Point the panel at a local agent with
    `-agent-socket /run/axionpanel/agent.sock` (the default); see
@@ -209,8 +219,10 @@ This is a development setup, not an installer or production deployment.
 
 MFA enrollment/disable and sudo have API endpoints but no wired settings UI yet.
 Password change (API) is implemented; session listing/revocation UI and an
-audit viewer remain pending. The agent enforces host policy centrally but has
-no mutating operations; its request audit is best-effort journal logging.
+audit viewer remain pending. The agent enforces host policy centrally; its
+request audit is best-effort journal logging. Static-site mutations separately
+use a durable host operation journal and transactional panel intent/completion.
+The static website screen has its own sudo prompt; MFA settings remain unwired.
 A clean checkout builds with a placeholder UI; without `make web`, `/` returns
 503 explaining how to build the frontend. Preview mode is explicit:
 `VITE_DESIGN_PREVIEW=true npm --prefix web run dev` (sign-in disabled).

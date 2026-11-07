@@ -9,6 +9,25 @@ import (
 	"time"
 )
 
+func TestLoadStaticSitesPolicy(t *testing.T) {
+	for _, body := range []string{`allow_static_sites = true`, `allow_static_sites = false`, `allow_static_sites = "yes"`} {
+		f := filepath.Join(t.TempDir(), "policy")
+		if err := os.WriteFile(f, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := LoadPolicy(f)
+		if strings.Contains(body, "yes") {
+			if err == nil {
+				t.Fatal("non-boolean accepted")
+			}
+			continue
+		}
+		if err != nil || got.AllowStaticSites != strings.HasSuffix(body, "true") {
+			t.Fatalf("policy=%+v err=%v", got, err)
+		}
+	}
+}
+
 func TestLoadPolicyDefaults(t *testing.T) {
 	p, err := LoadPolicy("")
 	if err != nil {

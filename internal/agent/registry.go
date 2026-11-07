@@ -46,6 +46,7 @@ const (
 	ReadOnly     Permission = "read_only"
 	RootTerminal Permission = "root_terminal"
 	RootFiles    Permission = "root_files"
+	StaticSites  Permission = "static_sites"
 )
 
 // Service binds a future operation to one exact startup-selected service.
@@ -53,7 +54,7 @@ const (
 func Service(target string) Permission { return Permission("service:" + target) }
 
 func (p Permission) valid() bool {
-	if p == ReadOnly || p == RootTerminal || p == RootFiles {
+	if p == ReadOnly || p == RootTerminal || p == RootFiles || p == StaticSites {
 		return true
 	}
 	target, ok := strings.CutPrefix(string(p), "service:")

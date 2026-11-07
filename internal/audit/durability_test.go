@@ -97,8 +97,11 @@ func TestAppendOnlyMigrationDownUp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = p.Down(ctx); err != nil {
-		t.Fatalf("down: %v", err)
+	// Exercise the audit guard migration explicitly. Later independent
+	// migrations (e.g. static sites) must not make this test target the wrong
+	// version or require weakening audit guards to satisfy it.
+	if _, err = p.DownTo(ctx, 2); err != nil {
+		t.Fatalf("down to pre-audit-guards version: %v", err)
 	}
 	if _, err = db.Exec(`INSERT INTO audit_log(action,outcome) VALUES('test','success'); DELETE FROM audit_log`); err != nil {
 		t.Fatalf("down guard remained: %v", err)

@@ -23,8 +23,10 @@ async function setup(page, handler) {
 }
 const sidebar = page => page.locator('aside').filter({ hasText: 'Host specs' })
 const leaveOverview = async page => {
-  await page.getByRole('link', { name: 'Websites', exact: true }).click()
-  await expect(page).toHaveURL(/\/websites$/)
+  // Websites now legitimately reads system/info for its operation catalog.
+  // Use an inert design screen to isolate Overview poller teardown.
+  await page.getByRole('link', { name: 'Databases', exact: true }).click()
+  await expect(page).toHaveURL(/\/databases$/)
 }
 
 test('Overview unmount clears sidebar LIVE through existing host event', async ({ page }) => {

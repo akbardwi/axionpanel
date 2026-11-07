@@ -57,6 +57,9 @@ type Server struct {
 	AllowRootPeer   bool
 	ShutdownTimeout time.Duration // defaults to five seconds
 	Logger          func(string, ...any)
+	// StaticSitesTimeout gives journal-backed site operations a longer HTTP
+	// deadline without widening the read-only 60s default.
+	StaticSitesTimeout time.Duration
 }
 
 func (s *Server) logf(format string, args ...any) {
@@ -227,7 +230,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		BaseContext:       func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      2 * opTimeout,
+		WriteTimeout:      s.httpWriteTimeout(),
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    32 << 10,
 	}
@@ -483,7 +486,9 @@ func (s *Server) dispatch(ctx context.Context, name string, params Params, meta 
 	// Logger is best-effort (no error return), not a durable mutation audit.
 	// Until a checked durable sink exists, privileged handlers never execute,
 	// even if host policy permits them. No generic shell is auto-authorized.
-	if op.permission != ReadOnly {
+	// StaticSites is the one exception: its adapter journals operation
+	// identity and digest to a private root-only file before mutating.
+	if op.permission != ReadOnly && op.permission != StaticSites {
 		return nil, newOpError(ErrUnsupported, "privileged operations are not implemented", nil)
 	}
 	return op.handler(ctx, params, meta)
@@ -506,6 +511,8 @@ func (s *Server) policyAllows(p Permission) bool {
 		return policy.AllowRootTerminal
 	case RootFiles:
 		return policy.AllowRootFiles
+	case StaticSites:
+		return policy.AllowStaticSites
 	default:
 		target, ok := strings.CutPrefix(string(p), "service:")
 		return ok && validServiceTarget(target) && policy.serviceAllowed(target)
@@ -523,6 +530,25 @@ func (s *Server) policySnapshot() Policy {
 		}
 	})
 	return s.policy
+}
+
+func (s *Server) httpWriteTimeout() time.Duration {
+	t := 2 * opTimeout
+	if s.StaticSitesTimeout > opTimeout {
+		t = 2 * s.StaticSitesTimeout
+		if t > 120*time.Second {
+			t = 120 * time.Second
+		}
+	}
+	return t
+}
+
+func isStaticSiteOperation(name string) bool {
+	switch name {
+	case "site.apply", "site.remove":
+		return true
+	}
+	return false
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
@@ -664,7 +690,11 @@ func (s *Server) handleOp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), opTimeout)
+	timeout := opTimeout
+	if s.StaticSitesTimeout > timeout && isStaticSiteOperation(name) {
+		timeout = s.StaticSitesTimeout
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 	res, err := s.dispatch(ctx, name, params, s.requestMeta(r))
 	if err != nil {

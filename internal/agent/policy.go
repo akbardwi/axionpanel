@@ -22,12 +22,14 @@ func policyOwnerOK(owner, euid uint32) bool { return owner == euid }
 type Policy struct {
 	AllowRootTerminal bool
 	AllowRootFiles    bool
+	AllowStaticSites  bool
 	AllowedServices   []string
 }
 
 var policyAllowedKeys = map[string]bool{
 	"allow_root_terminal": true,
 	"allow_root_files":    true,
+	"allow_static_sites":  true,
 	"allowed_services":    true,
 }
 
@@ -90,6 +92,12 @@ func LoadPolicy(path string) (Policy, error) {
 				return p, fmt.Errorf("agent policy: allow_root_files must be a boolean")
 			}
 			p.AllowRootFiles = v
+		case "allow_static_sites":
+			v, ok := val.(bool)
+			if !ok {
+				return p, fmt.Errorf("agent policy: allow_static_sites must be a boolean")
+			}
+			p.AllowStaticSites = v
 		case "allowed_services":
 			v, ok := val.([]string)
 			if !ok {
@@ -110,7 +118,7 @@ func LoadPolicy(path string) (Policy, error) {
 // snapshot, never the caller-owned struct, so post-load mutation cannot widen
 // access and there is no reload path.
 func newPolicySnapshot(p Policy) Policy {
-	out := Policy{AllowRootTerminal: p.AllowRootTerminal, AllowRootFiles: p.AllowRootFiles}
+	out := Policy{AllowRootTerminal: p.AllowRootTerminal, AllowRootFiles: p.AllowRootFiles, AllowStaticSites: p.AllowStaticSites}
 	if len(p.AllowedServices) > 0 {
 		out.AllowedServices = append([]string(nil), p.AllowedServices...)
 	}

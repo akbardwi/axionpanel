@@ -3,10 +3,17 @@
 ## Status and source
 
 Production builds use real password/MFA authentication and an embedded Go server.
-Host-control screens remain non-functional samples: no terminal, firewall,
-enrollment, deploy or restore operation reaches a server. Resource values are
-example data. Explicit design-preview builds bypass route authentication for
-visual review, but disable sign-in; never use them as production builds.
+The Overview's host identity/resource cards use authenticated agent telemetry
+and show unavailable states when the agent cannot supply values. Websites uses
+real local inventory and a narrow static HTTP Nginx plan/create/confirmed-remove
+API; mutations require fresh sudo and the agent's explicit static-site startup
+configuration plus dedicated host policy. Removal retains content. This slice is
+under integration/review, not a deployment or final readiness claim; see
+[../static-sites-plan.md](../static-sites-plan.md) and [../agent.md](../agent.md).
+Other host-control screens remain non-functional samples: no terminal, firewall,
+enrollment, deploy or restore operation reaches a server. Explicit design-preview
+builds bypass route authentication for visual review, but disable sign-in; never
+use them as production builds.
 
 The supplied Stitch export is preserved unchanged in `reference/` (5 HTML files,
 5 screenshots, 2 DESIGN.md files). The original branding is preserved only in those
@@ -33,12 +40,15 @@ source references. The application is in `../../web/` relative to this directory
 ## Screen inventory
 
 Reference-derived: Overview & Metrics, Containers & Deploy, Security & Backups,
-Terminal & Logs. These retain the supplied HTML structure; controls show a
-preview-only notice, not simulated system success. Light/dark share the same DOM.
+Terminal & Logs. These retain the supplied HTML structure. Aside from the real
+Overview host identity/resource cards, unsupported controls show a preview-only
+notice, not simulated system success. Light/dark share the same DOM.
 
 New designs:
 
-1. Websites — searchable resource list, site type/runtime/domain, create flow and inspector.
+1. Websites — real local static-site inventory, plan, create and confirmed vhost
+   removal with retained content; PHP/Apache/reverse-proxy/workload TLS remain
+   unavailable. Other website design controls are not implementation evidence.
 2. Databases — databases/users, create flow and grant configuration.
 3. SSL Certificates — validity/renewal state, HTTP-01 issuance and custom certificate import.
 4. File Manager — scoped folder navigation, file list and example text editor.
@@ -47,7 +57,9 @@ New designs:
 7. Settings — general/security/notifications, MFA/session settings, save feedback.
 8. Nodes — host inventory/enrollment/trust design added for expanded MVP.
 
-State for sample resource forms stays in memory and is discarded on reload.
+State for remaining sample resource forms stays in memory and is discarded on
+reload. The static-site workflow instead uses server inventory and durable jobs;
+it must not seed sample sites or infer mutation success from HTTP status alone.
 Auth passwords/codes are cleared on submit and never persisted in web storage.
 Session/challenge cookies are HttpOnly; the readable CSRF cookie is not a session
 credential. Design preview requires exactly `VITE_DESIGN_PREVIEW=true`.

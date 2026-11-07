@@ -33,6 +33,10 @@ import (
 
 var version = "0.0.0-dev"
 
+// Synchronous static-site dispatch takes at most 90s, followed by bounded
+// outcome persistence. Keep the HTTP response writable beyond both budgets.
+const panelWriteTimeout = 120 * time.Second
+
 func main() {
 	addr := flag.String("addr", "127.0.0.1:7800", "listen address")
 	dbPath := flag.String("db", "panel.db", "SQLite metadata database path")
@@ -203,6 +207,9 @@ func main() {
 	})
 	authSvc.Register(mux)
 	registerSystemRoutes(mux, authSvc, *agentSocket)
+	if err := registerSiteRoutes(mux, db, authSvc, *agentSocket); err != nil {
+		log.Fatalf("panel: static sites: %v", err)
+	}
 	// Unknown /api/ paths must stay JSON 404s, not fall through to the UI.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -233,7 +240,7 @@ func main() {
 		TLSConfig:         tlsConfig,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		WriteTimeout:      panelWriteTimeout,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    64 << 10,
 		BaseContext:       func(net.Listener) context.Context { return context.WithoutCancel(context.Background()) },
