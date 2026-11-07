@@ -1,121 +1,202 @@
-# Installing AxionPanel — foundation batch (NOT a complete installer)
+# Standalone pre-alpha installation
 
-Status: foundation batch only. It provides `--preflight-only`, `--verify-only`
-and private safe staging. `--apply` remains explicitly disabled. No host
-provisioning, account creation, unit installation, boot start, firewall or
-port change exists yet. A passing fake-root test proves the fixture layout,
-not readiness of a clean VPS.
+`install.sh` is a single-file installer with authenticated verification, private
+staging and explicit fresh-host apply. Copy only the reviewed `install.sh` to
+the destination: its isolated Python program includes the verifier and apply
+engine. No repository checkout, Go, Node, downloaded Python code or hosting
+stack is required.
 
-## Inputs
+This is limited pre-alpha testing distribution, **not a stable release**.
+Exact artifact publication and the independently distributed signing trust
+anchor must be confirmed before use; the default URL convention below is not
+an assertion that any version or key has been published. Isolated systemd
+namespace preparation and the real install/start/login/agent runtime gate are
+still pending. Implementation does not establish clean-VPS readiness.
 
-Run from a reviewed checkout containing `install.sh` and
-`scripts/release.py`. The installer loads that trusted local verifier; it does
-not use a bundled copy from an archive and never downloads release material.
-Use Linux, Bash, Python 3.11+ and OpenSSL 3.x with Ed25519 support. No Go,
-Node, package-manager operation or hosting stack is needed for this batch.
-Run inspection and staging as an unprivileged operator where possible; root
-is not required. Use an existing private scratch parent owned by that operator.
+## Host prerequisites and scope
+
+- Linux on amd64 or arm64; supported OS checks accept Ubuntu 24.04/26.04 and
+  Debian 12/13. This is the supported target matrix, not a tested runtime matrix.
+- Bash, Python 3.11+, OpenSSL 3 with Ed25519 support, and `ca-certificates` for
+  normal HTTPS certificate validation.
+- systemd and its standard host tools. Apply requires root and real systemd
+  PID 1; a fake filesystem root is not an installation target.
+- A fresh host without existing AxionPanel state, accounts or units, a detected
+  conflicting control panel, or an occupied selected listener.
+
+Missing prerequisites are diagnosed, not silently installed through APT.
+Nginx, Apache, PHP, Docker, Certbot and a hosting database are not prerequisites
+and are not installed. SQLite metadata is embedded in the panel.
+
+## Trust and artifact inputs
+
+Both `--version` and `--public-key` are mandatory. Pin an exact SemVer without
+its `v` prefix; there is no `latest` discovery or source compilation. Obtain the
+Ed25519 public key through an independently trusted out-of-band channel, and
+review the installer itself. Downloading a key beside the archives does not
+establish trust. There is no TOFU or unsigned bypass. A signature authenticates
+the signed manifest, not reproducibility or the safety of signed binaries.
+
+With no `--directory` or `--download-base-url`, the installer uses the HTTPS
+GitHub convention:
 
 ```text
-local release directory:
-  axionpanel-VERSION-linux-amd64.tar.gz
-  axionpanel-VERSION-linux-arm64.tar.gz
-  SHA256SUMS
-  SHA256SUMS.sig
-trusted Ed25519 public key
-new private stage directory
+https://github.com/akbardwi/axionpanel/releases/download/v<VERSION>/
 ```
 
-The release directory must contain exactly the two architecture archives and
-the signed manifest. Extra archives and unsigned-development markers are
-refused.
+`<VERSION>` is a placeholder, not a published release. A custom
+`--download-base-url` must use HTTPS without URL credentials, query or fragment.
+Normal CA validation applies; `--ca-file` can supply an explicitly trusted CA
+bundle. Downloads are bounded and timed, ignore ambient proxy settings, and
+refuse HTTPS-to-HTTP redirects. The installer downloads **both amd64 and arm64
+archives**, `SHA256SUMS` and `SHA256SUMS.sig`, even on a single-architecture host.
 
-## Preflight (read-only)
+Alternatively, `--directory` selects a local release directory containing
+exactly these four files (replace `VERSION` with the pinned version):
 
-```sh
-bash install.sh --preflight-only \
-  --directory /secure/releases/1.2.3 \
-  --version 1.2.3 \
-  --public-key /secure/trust/release-ed25519.pub \
-  --stage-dir /root/axion-stage
+```text
+axionpanel-VERSION-linux-amd64.tar.gz
+axionpanel-VERSION-linux-arm64.tar.gz
+SHA256SUMS
+SHA256SUMS.sig
 ```
 
-`--root` and `--arch` are inspection overrides. They may inspect a fake chroot
-layout but do not prove that the live host is ready. The tool checks the OS
-matrix (Ubuntu 24.04/26.04, Debian 12/13), required `systemd` paths,
-architecture, existing AxionPanel state and conflicting panels. It parses
-`os-release` as data, never sources or executes it.
+Extra files, archives and unsigned-development markers are refused. Local and
+HTTPS sources are mutually exclusive and use the same verification boundary.
 
-## Verification (read-only)
+## Verification, preflight and private staging
+
+All supplied filesystem paths must be absolute. `--stage-dir` is required
+except for apply, which can allocate a private directory under `/var/tmp`.
+An explicit stage must be new, with an existing caller-owned parent. Every
+ancestor of the stage parent and public key must be caller/root-owned, not
+group/other writable, and not a symlink. The key must be a bounded regular,
+caller/root-owned file, not group/other writable. Its validated descriptor
+supplies the snapshot bytes. Use inspection/staging without root where possible.
+
+The following values are **placeholders**. Replace the version with the exact
+available pre-alpha SemVer, and replace paths with independently trusted inputs.
+Do not run the placeholder literally. Each invocation needs a new stage path.
 
 ```sh
+VERSION='<PINNED_PRE_ALPHA_SEMVER>'
+
+# Authenticate and inspect both archives; do not extract or execute binaries.
 bash install.sh --verify-only \
-  --directory /secure/releases/1.2.3 \
-  --version 1.2.3 \
-  --public-key /secure/trust/release-ed25519.pub \
+  --version "$VERSION" --public-key /root/trust/release-ed25519.pub \
+  --stage-dir /root/axion-verify
+
+# Also inspect the host's OS/systemd paths and existing/conflicting state.
+bash install.sh --preflight-only \
+  --version "$VERSION" --public-key /root/trust/release-ed25519.pub \
+  --stage-dir /root/axion-preflight
+
+# Local source; retain authenticated payload and snapshot for review only.
+bash install.sh --directory /root/releases/pinned-pre-alpha \
+  --version "$VERSION" --public-key /root/trust/release-ed25519.pub \
   --stage-dir /root/axion-stage
 ```
 
-The installer copies the bounded release inputs into a private 0700 snapshot,
-authenticates the Ed25519 signature with the separately supplied public key,
-verifies the SHA-256 manifest, then rejects duplicate/absolute/traversal/
-symlink/hardlink/FIFO/sparse members, oversized content, wrong installer
-modes, missing or extra members and wrong ELF class/architecture. Both
-architecture archives are inspected; extraction happens only in the staging
-command.
+Preflight parses `os-release` as data. `--root` and `--arch` are inspection-only
+overrides, allowed with `--verify-only` or `--preflight-only`; fixtures are not
+proof of a working host or PID 1. Preflight also authenticates the artifacts.
+Neither inspection mode changes host configuration; both remove their private
+workspace on completion. They do create temporary verification files.
 
-## Private staging
+The installer authenticates the Ed25519 manifest with OpenSSL and checks exact
+archive names and SHA-256 digests before parsing archives. Both archives must
+satisfy the fixed 16-member USTAR allowlist, bounds, modes and ELF architecture
+checks. Duplicate, traversal, absolute, linked, special, sparse, missing and
+extra members are refused. Without an inspection flag or `--apply`, only the
+selected architecture is extracted under a new 0700 stage as `payload/`, with
+`snapshot/` retained. Staged binaries are not executed or installed.
+
+## Fresh-host apply
+
+Apply is a separate explicit action: **both `--apply` and `--yes` are required**.
+It requires root, an authenticated payload and a supported fresh systemd host.
+`--root` and `--arch` cannot bypass the real-host boundary. For a confirmed
+available testing version and independently trusted key (same placeholder rule):
 
 ```sh
-bash install.sh \
-  --directory /secure/releases/1.2.3 \
-  --version 1.2.3 \
-  --public-key /secure/trust/release-ed25519.pub \
-  --stage-dir /root/axion-stage
+VERSION='<PINNED_PRE_ALPHA_SEMVER>'
+sudo bash install.sh --apply --yes \
+  --version "$VERSION" --public-key /root/trust/release-ed25519.pub
 ```
 
-All input and output paths must be absolute. `--stage-dir` is required in every
-mode and must name a new directory whose caller-owned parent already exists
-and is not group/other writable. Every ancestor of the stage parent and of the
-public key must be owned by the caller or root and must not be group/other
-writable; the stage parent is pinned by descriptor across creation, so a
-concurrent rename cannot redirect staging. Inspection uses this directory only
-for its private snapshot and verifier temporary files, then removes it; it does
-not write elsewhere or change host configuration. The new stage is mode 0700 and
-contains `payload/` (authenticated installer-selected bytes) plus a retained
-`snapshot/` for independent review. Inspection modes remove the stage directory
-on completion. Staged binaries are not executed.
+This defaults to native HTTPS at **`https://127.0.0.1:8443`**, not a public bind.
+`--host` selects a canonical IP and `--port` an unprivileged port in 1024–65535;
+port **7800 is refused**. A non-loopback bind additionally requires explicit
+`--allow-public-listen`. No public IP is guessed. No firewall or provider-network
+rule is changed, no hosting service is adopted, and the Unix-only agent is never
+exposed over TCP. Public access and certificate trust remain operator decisions.
 
-## Apply
+Apply serializes installation with a root-controlled lock and refuses unsafe
+ownership, writable ancestors, symlink destinations, existing accounts/units or
+state, conflicting panels and occupied listeners. It provisions:
 
-`--apply` exits non-zero with "apply not implemented" before any host handling.
-No systemd unit, service user, unit file, `/opt` directory, boot start,
-service stop, firewall, HSTS or redirect behavior is present.
+- Root-owned binaries at `/usr/local/axionpanel/bin/`, authenticated reference
+  files under `/usr/local/axionpanel/share/`, and generated hardened units at
+  `/etc/systemd/system/axionpanel{,-agent}.service`. Archive templates are
+  references, not arbitrary root-executed unit directives.
+- A non-root `axionpanel` service account and private 0700
+  `/var/lib/axionpanel/` state. The panel cannot rewrite binaries, units or policy.
+- A root agent with a peer-UID-checked Unix socket at
+  `/run/axionpanel/agent.sock`. Only its four built-in read-only operations are
+  enabled; static-site and hosting-stack mutation are not enabled by installation.
+- Native self-signed IP TLS under `/etc/axionpanel/tls/` (root:axionpanel 0750;
+  certificate and key 0640). Self-signed TLS encrypts traffic but does not
+  automatically establish trusted server identity. HSTS is not enabled.
+- A secret entrance and `/var/lib/axionpanel/bootstrap.json`, generated as the
+  service user using exclusive files. Both secret files are mode 0600;
+  bootstrap contains username, generated password, entrance path and origin.
 
-## Trust and signing-key custody
+Only the two new AxionPanel units are started and enabled. Success requires
+active units, certificate-pinned HTTPS, entrance and login UI checks, a real
+authenticated login, agent-backed system information, and readiness-session
+logout. A bare health HTTP 200 is not enough. These are implemented success
+checks, **not a claim that the pending runtime acceptance gate has passed**.
 
-The public key is the trust anchor and must be obtained out-of-band. Every
-ancestor of the key path must be owned by the caller or root and not
-group/other writable; symlink inputs are refused. The key file itself must also
-be caller/root-owned and not group/other writable. Its bounded bytes are read
-from the same descriptor whose owner and mode were validated, so the file is
-never reopened for snapshotting. Keep the full checkout, key path and all
-ancestors under trusted ownership. A key delivered together with the archive,
-or a key obtained only from an untrusted environment, is not trusted. The
-signature proves that the holder of the matching private key signed
-`SHA256SUMS`, not provenance or reproducibility. Ephemeral test keys exist only
-under the test scratch directory. A production trust anchor is not yet
-published; this is an explicit blocker.
+## Initial access and secret custody
 
-## Verification limits
+Installer output contains only the origin, certificate SHA-256 fingerprint and
+bootstrap file location—not passwords or the entrance. Retrieve bootstrap over
+a trusted SSH session only, for example with a privileged read of
+`/var/lib/axionpanel/bootstrap.json`. Never paste its contents into chat,
+telemetry, support logs or a web-accessible file. Keep `secret.key` separate from
+DB backups; do not regenerate it to recover access.
 
-The test suite uses real subprocess calls against real `install.sh`, ephemeral
-Ed25519 keys, a fake root, and private scratch staging. It does not create
-accounts, install units, start services, or execute staged binaries. The
-production release matrix on a clean VPS remains unverified.
+For the loopback default, tunnel the same local port so the exact origin stays
+`https://127.0.0.1:8443`:
 
-## Explicitly unverified / not part of this batch
+```sh
+ssh -N -L 8443:127.0.0.1:8443 OPERATOR@SERVER
+```
 
-- PID1/systemd runtime, clean VPS matrix, reboot, upgrade/recovery.
-- Hosting-stack installation or public port opening.
-- Live `--apply` host mutation and service lifecycle.
+`OPERATOR@SERVER` is a placeholder. Verify the SSH-reported certificate
+fingerprint before trusting the self-signed certificate, then visit the secret
+entrance path from bootstrap at that origin and log in. The entrance is defense
+in depth, not a replacement for authentication. Avoid capturing the secret URL
+in routine logs or screenshots.
+
+## Reruns, partial failure and verification limits
+
+Reruns refuse existing installations; they do not adopt, reset, overwrite or
+regenerate credentials. This is not an upgrade, repair, uninstall or live
+migration tool. On partial failure the installer requests stops only for units
+it attempted to start, retains installation state for diagnosis, and requires
+**manual reconciliation**. A stop can fail; inspect actual service state. There
+is no automatic reset, recursive deletion of installed data or transactional OS
+rollback. Do not delete state just to force a retry.
+
+Runtime acceptance in an isolated PID/mount/network namespace with private
+systemd PID 1 is pending, including namespace preparation. Clean-VPS execution,
+reboot, every advertised OS/architecture, and upgrade/recovery remain separately
+unverified. Local fixtures, unit tests and static unit validation do not establish
+those results. No live development VPS migration is authorized by this guide.
+
+The profiles in [deployment.md](deployment.md) and
+[native-tls-systemd.md](native-tls-systemd.md) remain explicitly **manual**
+operator procedures, distinct from installer-generated units. See the
+[standalone contract](standalone-installer-plan.md) and the broader
+[installation plan](installation-plan.md) for acceptance and future scope.

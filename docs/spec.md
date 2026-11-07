@@ -11,8 +11,11 @@ first-admin bootstrap files are implemented. Local static Nginx websites are
 implemented as an opt-in adapter: an agent flag and host-policy key enable four
 closed `site.*` operations on a prepared, isolated Nginx prefix, and the panel
 exposes authenticated list/plan/create/delete routes with durable job intent.
-PHP, Apache, TLS, DNS and file editing stay unimplemented. The installer,
-provisioning and workload management remain unimplemented.
+PHP, Apache, workload TLS, DNS and file editing stay unimplemented. A standalone
+pre-alpha installer implements signed artifact verification, staging and explicit
+fresh-host apply; runtime acceptance and clean-VPS matrix results remain pending.
+Optional hosting-stack provisioning and broader workload management remain
+unimplemented.
 The contracts below include **DESIGN / NOT IMPLEMENTED** features, including
 remote enrollment/mTLS, containers/Compose, Git deploy, curated templates,
 backup/restore, Fail2ban monitoring and SSH public-key management. The initial
@@ -82,9 +85,12 @@ screens can be designed directly; all mock data/actions must be marked as such.
 - amd64 and arm64
 - systemd is required; Linux 5.6+ is required for `openat2` (all targets ship
   newer kernels)
-- a fresh server is recommended; the installer refuses to run when another
-  control panel is detected (`/www/server/panel`, `/usr/local/cpanel`,
-  `/usr/local/CyberCP`, `/usr/local/hestia`)
+- installer apply requires a fresh host and refuses existing AxionPanel state,
+  accounts/units, occupied listeners and detected conflicting control panels
+- installer tooling requires Bash, Python 3.11+, OpenSSL 3 with Ed25519 support,
+  `ca-certificates` and standard systemd tools; no checkout, Go or Node is needed
+- this supported target matrix is not a tested runtime matrix; isolated systemd
+  namespace preparation and real install/start/login/agent acceptance are pending
 - the panel is independent of the hosting stack: installation, HTTPS and login
   must not require Nginx, Apache, PHP, Docker, Certbot or a database server.
   Nginx and Apache are optional managed hosting services, not control-plane
@@ -94,6 +100,39 @@ screens can be designed directly; all mock data/actions must be marked as such.
   under 60 MB RSS at idle. This is a target to measure, not a measured number.
   Docker workloads, Git builds and backup staging need additional capacity;
   preflight checks must report host-specific RAM, disk and runtime constraints.
+
+### 2.1 Standalone pre-alpha installer
+
+`install.sh` is the only source file required on the destination; its isolated
+embedded Python includes verification and fresh-host apply. `--version` and an
+independently trusted out-of-band Ed25519 `--public-key` are mandatory. No latest
+lookup, TOFU, unsigned bypass or source build is allowed. The default HTTPS source
+uses GitHub's `releases/download/v<VERSION>/` convention (`<VERSION>` is an
+explicit placeholder, not a published release claim); a custom HTTPS base or
+local `--directory` can supply artifacts. Both amd64/arm64 archives plus
+`SHA256SUMS` and `SHA256SUMS.sig` are obtained and authenticated before parsing.
+
+`--stage-dir` must be new and private and is required except for apply, which
+may allocate a private stage. `--verify-only` and `--preflight-only` do not
+install or execute binaries. `--root`/`--arch` are inspection-only. Root-only
+`--apply --yes` installs root-owned binaries, generated hardened units, a
+non-root panel service account, a root read-only Unix agent, native self-signed
+TLS, and 0600 entrance/bootstrap files generated as the service user. Defaults
+are `127.0.0.1:8443`; non-loopback requires `--allow-public-listen`, port 7800 is
+refused, and no firewall changes occur. Bootstrap is retrieved only through
+trusted SSH, never printed in installer logs. Success checks include active
+units, pinned HTTPS, entrance/UI, authenticated login, agent-backed system info
+and logout. Reruns refuse adoption; partial failure preserves state and requires
+manual reconciliation, never automatic reset or installed-data deletion.
+
+Implementation is not acceptance: isolated systemd namespace preparation and
+runtime install/start/login/agent gates remain pending, as do the clean-VPS
+OS/architecture matrix and reboot. Limited pre-alpha testing distribution is not
+a stable release; exact artifact/key publication must be confirmed separately.
+Upgrade, repair, uninstall and live migration are not implemented. Existing
+systemd profiles remain explicitly manual alternatives. See
+[installation.md](installation.md) for operating requirements and trust custody,
+and [standalone-installer-plan.md](standalone-installer-plan.md) for acceptance.
 
 ## 3. Architecture
 
@@ -208,15 +247,18 @@ through the agent.
 ### 5.2 Transport
 
 HTTPS only, served by the panel itself; a managed web server is not a
-prerequisite. Planned initial address is `https://<server-ip>:8443` with a
-configurable port and an exact advertised origin. The installer creates a
+prerequisite. Installer apply defaults to `https://127.0.0.1:8443`, with an
+explicit canonical IP/port and exact origin. Non-loopback binds additionally
+require `--allow-public-listen`; port 7800 is refused and no firewall is changed.
+The installer creates a
 self-signed certificate containing the selected IP in its Subject Alternative
 Name and prints the fingerprint; self-signed encryption does not authenticate
 server identity by itself and browsers warn until trusted. Public plaintext HTTP
 login is not supported. The admin can later switch to a trusted certificate for a
 panel hostname. HSTS remains omitted; enabling it requires a separate trusted-TLS
-policy. Native HTTPS and explicit self-signed certificate initialization now exist
-in the binary; installer/onboarding remain planned. See [native-tls-plan.md](native-tls-plan.md).
+policy. Native HTTPS and explicit self-signed certificate initialization exist
+in the binary and fresh-host installer. Runtime installer acceptance remains
+pending; see [installation.md](installation.md) and [native-tls-plan.md](native-tls-plan.md).
 The public pre-alpha still uses loopback HTTP plus Nginx, unchanged until an
 explicit migration. Normal application responses carry
 `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`,
@@ -1170,7 +1212,7 @@ auth/navigation/lifecycle checks. It does not prove installer or mutation gates.
 | M1 | PARTIAL: login, 2FA, sessions, CSRF, sudo, password rotation and transactional auth audit implemented. DESIGN / NOT IMPLEMENTED: settings UI, audit viewer; expanded-schema migrations reviewed separately |
 | M2 | PARTIAL: local agent socket/peer credentials, deny-by-default policy, immutable operation catalog and read-only info/stats/metrics/capability detection implemented (`docs/agent.md`); authenticated `GET /api/v1/system/{info,stats,metrics,agent}` wired for the local host. DESIGN / NOT IMPLEMENTED: managed capabilities, services, durable jobs and reconciliation |
 | M2a | PARTIAL: native panel HTTPS for direct IP/DNS access, exact-origin config, explicit certificate initialization, protected initial-admin bootstrap file and optional secret entrance implemented; no hosting-stack dependency. Clean-host installation remains unverified |
-| M2b | DESIGN / NOT IMPLEMENTED: signed release packaging, clean-host installer, idempotent re-run, upgrade/recovery and uninstall boundaries ([installation plan](installation-plan.md)) |
+| M2b | PARTIAL: standalone signed-artifact verification/staging and fresh-host installer apply implemented, with rerun refusal and partial-state preservation. Isolated systemd namespace preparation/runtime acceptance, clean-host OS/architecture matrix and reboot remain pending. Upgrade/repair/uninstall remain DESIGN / NOT IMPLEMENTED. Limited pre-alpha testing only; no stable release or published version/key claimed ([installation guide](installation.md), [installation plan](installation-plan.md)) |
 | M2c | DESIGN / NOT IMPLEMENTED: durable mutation audit/jobs, typed optional Nginx/Apache/PHP-FPM/MariaDB installation, Software/Services status, reviewed catalog and unmanaged-service boundaries |
 | M3 | DESIGN / NOT IMPLEMENTED: sites, users, PHP-FPM, Nginx/Apache adapters and explicit coexistence profiles, validate/apply/test/rollback after a deliberately installed/managed web server |
 | M4 | DESIGN / NOT IMPLEMENTED: SSL with lego |

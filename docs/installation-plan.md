@@ -1,13 +1,18 @@
 # Standalone installation and host provisioning plan
 
-Status: approved installer design, NOT IMPLEMENTED. This supplements
-[spec.md](spec.md). Native TLS and explicit certificate initialization are now
-implemented in the binary (see [native-tls-plan.md](native-tls-plan.md));
-`install.sh`, automated onboarding, package jobs and software-management screens
-remain unimplemented. Manual loopback systemd templates remain in
-[deployment.md](deployment.md); a separate statically validated
-[native-HTTPS profile](native-tls-systemd.md) documents fresh-host preparation,
-not an installer or live migration.
+Status: standalone pre-alpha installer implemented; acceptance PARTIAL.
+The single-file `install.sh` implements signed artifact verification, private
+staging and root-only `--apply --yes` with generated units, initial onboarding
+and authenticated readiness checks. Isolated systemd namespace preparation and
+runtime acceptance remain pending. No stable release, exact published testing
+artifact/key, clean-VPS matrix result, reboot result or upgrade/recovery
+capability is claimed. Native TLS, explicit certificate initialization, entrance
+and protected bootstrap files are implemented in the binary (see
+[native-tls-plan.md](native-tls-plan.md)); optional package provisioning and
+software-management screens remain unimplemented. Manual loopback systemd templates remain in
+[deployment.md](deployment.md); the separately validated
+[native-HTTPS profile](native-tls-systemd.md) is a manual alternative, not a live
+migration.
 
 ## 1. Alignment with the original MVP
 
@@ -30,85 +35,82 @@ to the existing scope boundaries; the license is still deferred.
 The Go panel serves embedded UI, API and HTTPS directly. Neither installation,
 login nor panel availability requires Nginx, Apache, PHP, Docker, Certbot or a
 hosting database server. SQLite is embedded metadata storage, not a managed
-hosting database service. Optional dependencies of installer tooling are not
-hosting-stack prerequisites.
+hosting database service. Installer tooling requires Bash, Python 3.11+,
+OpenSSL 3 with Ed25519 support, `ca-certificates` and standard systemd tools.
+No repository checkout, Go or Node is needed on the destination host.
 
-- Planned initial address: `https://<server-ip>:8443`; port is configurable.
-  Format IPv6 literals with brackets. Installer checks the actual selected port,
-  reports available addresses, and does not assume it can infer a public IP
-  correctly behind NAT. Operator chooses/overrides the advertised address.
-- The panel runs as `axionpanel`; its unprivileged port does not require root.
-  The local root agent exposes only a permission-controlled Unix socket.
-- Ports 80/443 remain available for managed websites. No mandatory panel vhost
-  is created. An operator-configured reverse proxy is optional, not a dependency.
+- Apply defaults to native `https://127.0.0.1:8443`; explicit canonical
+  IP/port flags can change the bind. Non-loopback binds require
+  `--allow-public-listen`, and port 7800 is refused. No public IP is guessed and
+  no firewall or provider-network rule is changed.
+- The panel runs as non-root `axionpanel`; the local root agent exposes only a
+  permission-controlled Unix socket.
+- Ports 80/443 remain available for later managed websites. No panel vhost is
+  created. A reverse proxy is optional, not a dependency.
 - Stopping or removing a hosting service must not stop panel HTTPS or login.
-- The existing public pre-alpha deployment uses Nginx and loopback HTTP. Leave
-  it unchanged until native TLS is implemented, verified and explicitly migrated.
-  The binary supports manual direct-IP HTTPS; automated installation and live
-  migration remain pending.
+- The public pre-alpha deployment using Nginx and loopback HTTP is unchanged.
+  The installer does not migrate a live host.
 
-## 3. Installer contract
+## 3. Shipped standalone installer contract
 
-The intended entry point is a downloaded, reviewed `install.sh` run with root
-privileges. Do not publish a runnable install command or download URL until the
-installer and release artifacts exist. The installer owns privileged host setup;
-admin bootstrap runs as the non-root panel service user.
+`install.sh` is the only file copied to the destination. Its embedded Python
+program verifies/stages signed artifacts and may perform the explicit apply
+mutation. The versionless "run this URL" command must not be published unless
+the exact artifact and independently distributed trust key are confirmed.
 
-1. Validate the supported OS/version/architecture matrix in spec §2, systemd,
-   resources, selected port, existing installation and conflicting panels. Keep
-   the original refusal to install over another detected control panel. Never
-   stop, replace or silently adopt an existing service to free a port.
-2. Retrieve matching versioned binaries and verify release signatures using an
-   independently trusted verification key. Checksums alone do not authenticate
-   downloads. Avoid compiling Go/Vue on the target VPS.
-3. Create service users, root-owned binaries, restricted configuration/data paths
-   and systemd units. The non-root service must have execute access to its
-   binary but no write access to binaries, units or agent policy.
-4. Configure native HTTPS and an exact advertised origin, then generate initial
-   admin access as the panel user. Preserve original auth requirements: secure
-   cookies, CSRF/Origin checks, MFA, sudo, and the optional secret entrance path.
-   The entrance path is defense in depth, never a substitute for authentication.
-5. Store one-time bootstrap access in an owner-only local file, not systemd
-   logs, telemetry, remote callbacks or chat. Display the URL, certificate
-   fingerprint and file location to the SSH operator, not secrets in routine logs.
-6. Start services and verify HTTPS, panel health, agent peer credentials and login
-   readiness before reporting installation success. Do not install hosting-stack
-   packages as a side effect.
+1. `--version` accepts an exact pinned SemVer; `--public-key` is mandatory.
+   Obtain that key out-of-band and review the installer. No latest discovery,
+   source compilation, TOFU, downloaded verifier or unsigned bypass.
+2. Local `--directory` must contain exactly two architecture archives plus
+   `SHA256SUMS` and `SHA256SUMS.sig`; HTTPS download defaults to
+   `https://github.com/akbardwi/axionpanel/releases/download/v<VERSION>/`,
+   with `<VERSION>` an explicit placeholder rather than a claimed published
+   release. A custom HTTPS `--download-base-url` is allowed. Downloads obtain
+   both amd64/arm64 archives, the manifest and detached signature, then
+   authenticate the manifest and check exact names/digests before parsing.
+3. Preflight/verification modes may run without root and use a new explicit
+   `--stage-dir`. Apply may allocate its own private `/var/tmp` workspace.
+   `--root`/`--arch` remain inspection-only. Existing AxionPanel state,
+   conflicting panels, occupied listeners and unsafe paths are refused.
+4. `--apply --yes` authorizes root provisioning on a supported fresh systemd
+   host. It writes root-owned binaries, creates the non-root service account,
+   private state, self-signed TLS and generated units, and stores a 0600
+   entrance and `bootstrap.json` created as the service user. The agent remains
+   read-only over Unix peer credentials.
+5. Secret material never goes to installer stdout, stderr or the journal. Only
+   the origin, certificate fingerprint and bootstrap path are printed. The
+   operator retrieves bootstrap securely through SSH.
+6. Apply starts and enables only the two AxionPanel units, checking unit
+   state, certificate-pinned HTTPS, entrance/UI, authenticated health,
+   agent-backed system information and session cleanup. These checks are
+   implemented as part of the engine but do not yet constitute a passed runtime
+   acceptance gate.
 
-Preflight lists the required inbound panel port. Do not disable a firewall or
-silently open ports; firewall and provider-network changes require explicit
-operator consent. Do not expose a local agent listener publicly. Remote agent
-mTLS remains a separate authenticated-enrollment design, not an installer shortcut.
-
-Idempotency means re-running detects and preserves an existing installation;
-it must not regenerate keys/admin credentials, overwrite configuration or reset
-metadata. Distinguish install, repair and upgrade. Verify signatures and
-compatibility before upgrade, back up metadata and configuration with restrictive
-permissions, and document recovery across schema changes; binary rollback alone
-is not database rollback. Uninstall preserves workloads, data and keys by default;
-destructive removal is a separate explicitly confirmed operation. Do not promise
-transactional OS-package rollback.
+Existing behavior, repair, upgrade and uninstall are distinct. Reruns refuse
+adoption and must not regenerate credentials or reset state. Partial failure
+preserves state and requires manual reconciliation; no automatic reset,
+deletion or transactional OS rollback is promised.
 
 ## 4. Initial TLS and certificate custody
 
-For initial IP access, generate a self-signed certificate with the selected IP
-in its Subject Alternative Name. Print its fingerprint over SSH for independent
-verification. Browsers warn until the certificate is trusted; self-signed TLS does
-not establish authenticated server identity automatically. Public plaintext HTTP
-login is not an installation mode. SSH tunneling remains an alternative.
+The shipped fresh-host installer generates a self-signed certificate for the
+selected IP in the certificate's Subject Alternative Name and prints its
+fingerprint for out-of-band verification. Browsers warn until the certificate
+is trusted; self-signed TLS does not establish authenticated server identity.
+Public plaintext HTTP login is not an installation mode. SSH tunneling remains
+an alternative.
 
-Panel HTTPS keys are separate from site TLS keys and agent enrollment keys. Plan
-`/etc/axionpanel/tls/` as `root:axionpanel` mode `0750`, with private key mode
-`0640`, readable by the non-root TLS server but never exposed through API/UI.
-Site keys remain under agent custody per spec §4/§5. Do not grant the panel read
-access to the site-key tree or relax systemd sandboxing to share those keys.
+Panel HTTPS keys remain separate from site TLS and agent enrollment keys. The
+installed `/etc/axionpanel/tls/` layout is `root:axionpanel` mode `0750`, with
+the key mode `0640`; the panel reads the key, and neither key is exposed through
+API/UI. Site keys remain under agent custody per spec §4/§5. Do not grant the
+panel site-key access or relax agent sandboxing to share them.
 
-A later panel hostname/trusted certificate can replace the initial certificate
-without making a hosting web server mandatory. Preserve spec §5.2's trusted-only
-HSTS rule; certificate trust is not inferred from merely loading a TLS file.
-Exact renewal/reload and origin-transition behavior must be designed and tested
-before claiming automated panel-certificate management. Site SSL remains a
-separate feature under spec §9.
+A later trusted hostname/certificate can replace the initial certificate
+without making a hosting web server mandatory. HSTS remains omitted until a
+separate trusted-TLS policy. Automated panel-certificate renewal/reload and
+origin transitions are still pending. Site SSL remains a separate feature under
+spec §9.
 
 ## 5. Empty-host UX and later provisioning
 
@@ -117,7 +119,8 @@ database absent; no websites. Never invent versions, healthy services or sample
 websites. Preserve existing design language and real-path navigation, with new
 software/setup screens designed to the same conventions.
 
-Provide Software/Services management before enabling website creation. Use a
+**DESIGN / NOT IMPLEMENTED:** optional package provisioning and Software/Services
+management remain separate from the installer. Use a
 closed reviewed component/version catalog, OS-specific compatibility checks,
 explicit install confirmation and target host selection. Initial managed stack:
 Nginx, Apache, supported PHP-FPM versions and MariaDB; version/package-source choices must
@@ -138,18 +141,25 @@ JSON logs are not sufficient for these mutation operations.
 
 ## 6. Dependency order and acceptance gates
 
-1. Specify installation, port/origin, native TLS, bootstrap/entrance and recovery.
-2. Implement standalone HTTPS and secure initial setup; retain loopback/SSH mode.
-3. Build signed release packaging and an installer; verify clean-machine install
-   without any hosting stack, rerun safety, failure handling, upgrade and recovery.
+1. The standalone installer contract, port/origin, native TLS, bootstrap/entrance
+   and partial-failure boundaries are implemented in `install.sh`.
+2. Standalone HTTPS and secure initial setup are implemented; the loopback/SSH
+   manual profile remains available.
+3. Finish namespace preparation and verify clean-host
+   install, authenticated login, agent-backed readiness, rerun refusal, reboot,
+   failure handling and supported OS/architecture combinations.
 4. Add durable jobs/audit and typed optional component provisioning.
-5. Implement real Websites against deliberately installed/managed Nginx/Apache, with
-   validate/apply/rollback; continue all remaining original MVP features.
+5. Implement real Websites against deliberately installed/managed Nginx/Apache,
+   with validate/apply/rollback, then complete remaining MVP work.
 
-Installer work moves ahead of Websites; final integrated release acceptance stays
-at M13. Each advertised OS/architecture needs its own verified matrix result;
-Ubuntu development-host success is not evidence for Debian or all architectures.
-Primary acceptance: on a clean supported VPS without Nginx/Apache/PHP/MariaDB,
-install, reboot and access the panel securely by IP. Verify control-plane health
-also when hosting services are absent/stopped, and verify no unintended port,
-service, firewall or configuration changes. These gates are planned, not passed.
+The standalone installer is deliberately ahead of Websites. Each advertised
+OS/architecture needs its own verified matrix result; development-host success
+does not certify all targets. Primary acceptance: on a clean supported VPS
+without Nginx/Apache/PHP/MariaDB, install, reboot and access the panel securely
+by IP; verify control-plane health, no unintended port/service/firewall/config
+changes, and authenticated agent-backed behavior. Those gates remain planned,
+not passed.
+
+See [the operating guide](installation.md) for prerequisite checks, exact
+placeholder examples, trust custody, SSH retrieval, partial-failure behavior
+and verification limits.

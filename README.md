@@ -23,16 +23,18 @@ work. Static UI references/prototypes are design artifacts with mock data.
 Implemented:
 - Native panel HTTPS with prevalidated certificate/key files and explicit
   self-signed IP/DNS initialization (`-init-tls`). Plain HTTP is loopback-only.
-  A static systemd profile and operator procedure exist; no host installer apply or live
-  cutover yet. See [native HTTPS plan](docs/native-tls-plan.md) and the
+  Fresh-host installer apply generates a native HTTPS profile; live cutover is
+  not supported. See [installation](docs/installation.md), the
+  [native HTTPS plan](docs/native-tls-plan.md) and the separate
   [manual systemd profile](docs/native-tls-systemd.md).
 - Agent foundation: peer-UID-checked Unix socket, strict request validation and
   four read-only operations (`system.info`, `system.stats`, `system.metrics`,
   `capabilities.refresh`) by default. Four closed `site.*` operations can be
   registered explicitly; see [docs/agent.md](docs/agent.md).
-- Installer foundation: `--preflight-only`, `--verify-only` and authenticated
-  private staging via `install.sh`. The full host `--apply` step is not
-  implemented yet; see [installation status and limits](docs/installation.md).
+- Standalone installer: signed HTTPS/local artifacts, `--preflight-only`,
+  `--verify-only`, private staging and explicit fresh-host `--apply --yes` via a
+  single copied `install.sh`. Runtime acceptance is pending, not a stable release;
+  see [installation requirements, trust and limits](docs/installation.md).
 - Local host data in the panel: authenticated `GET /api/v1/system/{info,stats,metrics,agent}`
   proxied to the agent socket (`-agent-socket`, default
   `/run/axionpanel/agent.sock`). The Overview header and its four resource
@@ -55,8 +57,8 @@ Implemented:
   records from the read-only agent. See [audit coverage](internal/audit/README.md).
 
 Design only (not implemented):
-- Installer host apply, automated direct-IP onboarding/live systemd migration, settings UI
-  and audit viewer ([installation plan](docs/installation-plan.md); manual
+- Installer upgrade/repair/uninstall and live systemd migration, settings UI
+  and audit viewer ([installation plan](docs/installation-plan.md); separate manual
   [native-HTTPS systemd profile](docs/native-tls-systemd.md))
 - Full host dashboard, streaming metrics, services, terminal and logs
 - PHP-FPM/reverse-proxy Nginx and Apache websites, explicit coexistence
@@ -122,8 +124,9 @@ separated from existing tables. No delivery estimates are assigned.
 
 Multi-user admin/reseller/user roles, packages/quotas, DNS/mail/FTP, a public app
 marketplace, public API tokens, notifications and signed automatic updates remain
-future work. Signed installer/release verification belongs to the MVP release
-gates. Distributed scheduling/consensus/HA is not promised by the multi-node UI.
+future work. Signed standalone pre-alpha installer verification and fresh-host
+apply are implemented, but final release/upgrade validation, stable publication
+and full clean-host acceptance remain M13 release gates. Distributed scheduling/consensus/HA is not promised by the multi-node UI.
 
 ## Stack
 
@@ -152,6 +155,31 @@ Design provenance, screen mapping and prototype guidance belong in
 [docs/design/README.md](docs/design/README.md); supplied references are under
 `docs/design/reference/`. New screens may be designed directly, with mock actions
 and unsupported capabilities clearly distinguished from implemented behavior.
+
+## Standalone pre-alpha installation
+
+See [the installation guide](docs/installation.md) for a single-file installer
+requiring Bash, Python 3.11+, OpenSSL 3, `ca-certificates` and systemd on Ubuntu
+24.04/26.04 or Debian 12/13 (amd64/arm64). No checkout, Go, Node or hosting stack
+is needed. The supported target matrix is not a tested runtime matrix: isolated
+systemd namespace preparation and install/start/login/agent acceptance are still
+pending. No stable release or exact published testing artifact/key is claimed.
+
+Pin `--version` and supply an independently trusted out-of-band `--public-key`.
+HTTPS defaults to the GitHub versioned release convention and downloads both
+architecture archives plus manifest/signature; `--directory` selects local
+artifacts. All non-apply modes require a new `--stage-dir`; apply can allocate
+its own private stage. The guide's versions and paths are explicit placeholders.
+
+Root-only `--apply --yes` refuses existing state rather than adopting it. It
+installs root-owned binaries and generated hardened units, a non-root panel and
+a root read-only Unix agent, self-signed TLS, and private 0600 entrance/bootstrap
+files. Retrieve `/var/lib/axionpanel/bootstrap.json` only over trusted SSH; secrets
+are not printed. Native HTTPS defaults to `127.0.0.1:8443`; non-loopback binds need
+`--allow-public-listen`. Port 7800 is refused and no firewall is changed. Success
+checks include authenticated agent-backed data, not just health. Partial failure
+preserves state and requires manual reconciliation, not reset or deletion.
+The existing systemd profiles remain manual alternatives, not live migration.
 
 ## Build and local smoke test
 
@@ -204,7 +232,8 @@ This is a development setup, not an installer or production deployment.
    Open `http://127.0.0.1:7800/`, or use an SSH tunnel forwarding local port
    7800 to server port 7800. `-insecure-loopback` disables Secure cookies only
    for an explicit HTTP loopback origin. Do not use it for public access.
-   Native TLS and installer verification/staging are implemented; host apply is not. Optional `-trusted-proxy`
+   This port-7800 HTTP example is development-only: installer apply refuses
+   7800 and defaults to native HTTPS on 127.0.0.1:8443. Optional `-trusted-proxy`
    CIDRs enable client-IP handling behind a controlled reverse proxy; see
    [docs/public-access.md](docs/public-access.md) for the opt-in TLS setup.
    Setting `-origin` does not enable TLS. Auth and the Overview's existing

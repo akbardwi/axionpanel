@@ -339,12 +339,12 @@ class InstallContract(unittest.TestCase):
         self.reject(self.cli(stage=True), "stage parent")
         self.assertFalse(self.stage.parent.exists())
 
-    def test_apply_disabled_before_any_argument_or_host_handling(self):
+    def test_apply_missing_required_inputs_refused_before_host_handling(self):
         self.assertTrue(INSTALL.is_file(), "install.sh missing")
         for args in (("--apply",), (str(self.root), "--apply"), ("--apply", "--stage-dir", str(self.stage))):
             with self.subTest(args=args):
                 result = subprocess.run(["bash", str(INSTALL), *args], capture_output=True, text=True)
-                self.reject(result, "apply not implemented")
+                self.reject(result, "required")
                 self.assertFalse(self.stage.exists())
         if os.geteuid() == 0:
             # Read real script using inherited FD; /root need not be traversable
@@ -355,7 +355,7 @@ class InstallContract(unittest.TestCase):
                     os.setgid(65534)
                     os.setuid(65534)
                 result = subprocess.run(["bash", f"/proc/self/fd/{script.fileno()}", "--apply"], pass_fds=(script.fileno(),), preexec_fn=drop, capture_output=True, text=True)
-            self.reject(result, "apply not implemented")
+            self.reject(result, "required")
 
     def test_signed_unsafe_tar_boundaries(self):
         for attack in ("duplicate", "absolute", "traversal", "symlink", "hardlink", "fifo", "mode", "oversize", "missing", "wrong-elf", "extra"):
