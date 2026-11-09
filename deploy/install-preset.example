@@ -1,0 +1,20 @@
+# Bash configuration example; not an installer or a published release.
+# Copy to /root/install-preset.conf, review, and edit the three input values.
+# Source only your own reviewed copy: Bash configuration is executable code.
+# No passwords, tokens, private signing keys, or custom CA are required here.
+# Both architecture archives, SHA256SUMS and SHA256SUMS.sig must be available.
+# Obtain the Ed25519 PUBLIC key independently; do not trust a bundled key alone.
+
+AXION_INSTALL_ARGS=(
+  --apply
+  --yes
+  --version 'CHANGE_ME_PINNED_SEMVER'
+  --public-key '/root/trust/release-ed25519.pub'
+  --directory '/root/releases/CHANGE_ME_PINNED_SEMVER'
+  --host '127.0.0.1'
+  --port '8443'
+  --admin 'admin'
+)
+
+# This file only defines arguments; sourcing it does not invoke the installer.
+# Apply remains a separate operator action. See docs/installation.md.

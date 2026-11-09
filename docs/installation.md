@@ -157,6 +157,49 @@ authenticated login, agent-backed system information, and readiness-session
 logout. A bare health HTTP 200 is not enough. These are implemented success
 checks, **not a claim that the pending runtime acceptance gate has passed**.
 
+## Optional reviewed local preset
+
+To avoid typing the same flags, copy
+[`deploy/install-preset.example`](../deploy/install-preset.example) alongside
+`install.sh`. The preset is a Bash argument array, not an installer-supported
+configuration format. It contains no credentials and does not invoke anything
+when sourced. **Source only a reviewed, operator-controlled file**: Bash
+configuration can execute code. Do not source an untrusted downloaded preset
+as root.
+
+For a fresh testing VPS, save your reviewed copy as
+`/root/install-preset.conf`, set it to root-owned mode 0600, and edit:
+
+- `--version`: an exact available version, without the `v` prefix.
+- `--public-key`: the absolute path to an independently trusted Ed25519 public key.
+- `--directory`: the absolute directory containing the four signed release inputs
+  described above, including both architecture archives.
+
+No public release or signing trust anchor is implied by the example. It will
+not install until real artifacts and a trusted key have been supplied. The
+preset deliberately keeps HTTPS on loopback port 8443 and does not open firewall
+ports. `--ca-file` is **optional**, for custom HTTPS trust only; a local directory
+source does not need it. The public signing key is still mandatory.
+
+From a trusted SSH shell, in the directory containing your reviewed `install.sh`:
+
+```bash
+# Review and edit the preset first; do not run its placeholders literally.
+source /root/install-preset.conf
+printf 'Installer arguments: '; printf '%q ' "${AXION_INSTALL_ARGS[@]}"; printf '\n'
+read -r -p 'Provision this fresh VPS? Type INSTALL: ' confirmation
+if [[ "$confirmation" == INSTALL ]]; then
+  sudo bash ./install.sh "${AXION_INSTALL_ARGS[@]}"
+else
+  printf 'Cancelled; installer not invoked.\n'
+fi
+```
+
+The confirmation above is an operator-side convenience; the underlying
+`--apply --yes`, OS/fresh-host checks, signature verification and rerun refusal
+remain unchanged. Keep bootstrap passwords and private signing keys out of the
+preset. This is not an upgrade or a way to install over an existing panel.
+
 ## Initial access and secret custody
 
 Installer output contains only the origin, certificate SHA-256 fingerprint and
