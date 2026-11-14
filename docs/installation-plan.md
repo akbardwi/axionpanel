@@ -39,10 +39,14 @@ hosting database service. Installer tooling requires Bash, Python 3.11+,
 OpenSSL 3 with Ed25519 support, `ca-certificates` and standard systemd tools.
 No repository checkout, Go or Node is needed on the destination host.
 
-- Apply defaults to native `https://127.0.0.1:8443`; explicit canonical
-  IP/port flags can change the bind. Non-loopback binds require
-  `--allow-public-listen`, and port 7800 is refused. No public IP is guessed and
-  no firewall or provider-network rule is changed.
+- Apply defaults to `--host auto --port 8443`: the default-route IPv4 source
+  becomes the canonical HTTPS bind/origin. An explicit canonical IP, including
+  loopback, and an unprivileged port are still selectable; non-loopback binds
+  require `--allow-public-listen`, port 7800 is refused, and public IP/NAT
+  guessing remains excluded.
+- Without `--open-firewall`, no firewall or provider-network rule is changed.
+  The optional flag acts only on an already active supported UFW after local
+  readiness.
 - The panel runs as non-root `axionpanel`; the local root agent exposes only a
   permission-controlled Unix socket.
 - Ports 80/443 remain available for later managed websites. No panel vhost is

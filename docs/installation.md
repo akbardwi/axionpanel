@@ -113,7 +113,8 @@ selected architecture is extracted under a new 0700 stage as `payload/`, with
 
 ## Fresh-host apply
 
-Apply is a separate explicit action: **both `--apply` and `--yes` are required**.
+Apply is a separate explicit action: `--apply` is required, followed by terminal
+confirmation or prior consent through `--yes`.
 It requires root, an authenticated payload and a supported fresh systemd host.
 `--root` and `--arch` cannot bypass the real-host boundary. For a confirmed
 available testing version and independently trusted key (same placeholder rule):
@@ -121,15 +122,49 @@ available testing version and independently trusted key (same placeholder rule):
 ```sh
 VERSION='<PINNED_PRE_ALPHA_SEMVER>'
 sudo bash install.sh --apply --yes \
-  --version "$VERSION" --public-key /root/trust/release-ed25519.pub
+  --version "$VERSION" --public-key /root/trust/release-ed25519.pub \
+  --host 127.0.0.1
 ```
 
-This defaults to native HTTPS at **`https://127.0.0.1:8443`**, not a public bind.
-`--host` selects a canonical IP and `--port` an unprivileged port in 1024–65535;
-port **7800 is refused**. A non-loopback bind additionally requires explicit
-`--allow-public-listen`. No public IP is guessed. No firewall or provider-network
-rule is changed, no hosting service is adopted, and the Unix-only agent is never
-exposed over TCP. Public access and certificate trust remain operator decisions.
+Apply prints the resolved plan — listener, origin, administrator, firewall action —
+and then requires the operator to type `INSTALL` on the controlling terminal. Any
+other answer aborts before provisioning. `--yes` records prior consent and skips
+only that prompt; it never publishes a listener by itself.
+
+`--host` accepts `auto`, a canonical IP address, or `127.0.0.1`. `auto` is the
+default: the address the kernel selects for the default route is used, discovered
+through a connected UDP socket on a documentation address, so nothing is sent,
+resolved or looked up externally. Detection fails closed (no default route,
+loopback or malformed result) and then requires an explicit `--host`. The resolved
+address is frozen before validation, and the same address is bound, served and
+certified. An address that is not globally routable is labelled **LOCAL**, with a
+statement that external reachability depends on provider routing; the installer
+never claims public reachability it did not verify.
+
+`--port` selects an unprivileged port in 1024–65535; port **7800 is refused**. A
+non-loopback bind additionally requires explicit `--allow-public-listen`. No
+hosting service is adopted and the Unix-only agent is never exposed over TCP.
+Public access and certificate trust remain operator decisions.
+
+`--open-firewall` is the only firewall action and is optional. It requires
+`--apply`, a non-loopback listener, and an already active UFW reporting
+`Status: active` with no existing rule covering the port. The installer never
+enables, resets or reconfigures a firewall, never switches to another backend,
+and adds one `ufw allow <port>/tcp comment <invocation-id>` rule, only after the panel answered
+readiness locally. On a later failure it attempts to delete that rule and reports
+whether removal succeeded; a rule it cannot attribute leaves manual
+reconciliation to the operator. Provider security groups and port ranges stay
+manual.
+
+`https://127.0.0.1:8443` is no longer the implicit default. With no `--host`,
+the installer selects the default-route address but refuses a non-loopback bind
+unless `--allow-public-listen` is also supplied. Pass
+`--host 127.0.0.1 --port 8443` for an SSH-tunnel-only installation.
+
+Direct HTTPS is an operator-facing choice, not a claim of public reachability:
+provider routing, DNS and every firewall outside the optional UFW rule remain
+outside the installer.
+
 
 Apply serializes installation with a root-controlled lock and refuses unsafe
 ownership, writable ancestors, symlink destinations, existing accounts/units or
@@ -209,8 +244,10 @@ a trusted SSH session only, for example with a privileged read of
 telemetry, support logs or a web-accessible file. Keep `secret.key` separate from
 DB backups; do not regenerate it to recover access.
 
-For the loopback default, tunnel the same local port so the exact origin stays
-`https://127.0.0.1:8443`:
+For an explicit tunnel-only installation (`--host 127.0.0.1`), tunnel the same
+local port so the exact origin stays `https://127.0.0.1:8443`. With the default
+`--host auto`, open the resolved origin directly from a trusted client; a local
+address is labelled LOCAL and external reachability is not assumed.
 
 ```sh
 ssh -N -L 8443:127.0.0.1:8443 OPERATOR@SERVER

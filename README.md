@@ -171,12 +171,16 @@ architecture archives plus manifest/signature; `--directory` selects local
 artifacts. All non-apply modes require a new `--stage-dir`; apply can allocate
 its own private stage. The guide's versions and paths are explicit placeholders.
 
-Root-only `--apply --yes` refuses existing state rather than adopting it. It
+Root-only `--apply` with terminal `INSTALL` or prior `--yes` consent refuses
+existing state rather than adopting it. It
 installs root-owned binaries and generated hardened units, a non-root panel and
 a root read-only Unix agent, self-signed TLS, and private 0600 entrance/bootstrap
 files. Retrieve `/var/lib/axionpanel/bootstrap.json` only over trusted SSH; secrets
-are not printed. Native HTTPS defaults to `127.0.0.1:8443`; non-loopback binds need
-`--allow-public-listen`. Port 7800 is refused and no firewall is changed. Success
+are not printed. Native HTTPS defaults to `--host auto --port 8443` (IPv4
+default-route source, without external lookup); non-loopback binds need
+`--allow-public-listen`. Use `--host 127.0.0.1` for a tunnel-only install.
+Port 7800 is refused; firewall changes require separate `--open-firewall` consent
+and support already-active UFW only. Success
 checks include authenticated agent-backed data, not just health. Partial failure
 preserves state and requires manual reconciliation, not reset or deletion.
 The existing systemd profiles remain manual alternatives, not live migration.
@@ -233,7 +237,9 @@ This is a development setup, not an installer or production deployment.
    7800 to server port 7800. `-insecure-loopback` disables Secure cookies only
    for an explicit HTTP loopback origin. Do not use it for public access.
    This port-7800 HTTP example is development-only: installer apply refuses
-   7800 and defaults to native HTTPS on 127.0.0.1:8443. Optional `-trusted-proxy`
+   7800 and defaults to native HTTPS on the default-route address at port 8443
+   (non-loopback requires consent); explicit `--host 127.0.0.1` keeps it local.
+   Optional `-trusted-proxy`
    CIDRs enable client-IP handling behind a controlled reverse proxy; see
    [docs/public-access.md](docs/public-access.md) for the opt-in TLS setup.
    Setting `-origin` does not enable TLS. Auth and the Overview's existing

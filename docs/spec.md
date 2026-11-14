@@ -103,6 +103,18 @@ screens can be designed directly; all mock data/actions must be marked as such.
 
 ### 2.1 Standalone pre-alpha installer
 
+Direct listener selection now defaults to `--host auto` (IPv4 default-route source
+address, without sending packets or querying an external service). Non-loopback
+listeners still require `--allow-public-listen`; explicit loopback/manual IPs
+remain supported. Apply shows the plan and requires terminal `INSTALL` unless
+`--yes` is supplied. Non-global addresses are labelled LOCAL, without promising
+external reachability. Optional `--open-firewall` supports already-active UFW
+only, refuses existing/ambiguous port rules, and adds a commented TCP rule only
+after readiness, with failure rollback attempted under the installation lock.
+No firewall enable/reset, public-IP lookup or NAT bind/origin split is provided.
+Real systemd clean-host, reboot and firewall-mutation acceptance remain pending.
+See [direct-listener-plan.md](direct-listener-plan.md).
+
 `install.sh` is the only source file required on the destination; its isolated
 embedded Python includes verification and fresh-host apply. `--version` and an
 independently trusted out-of-band Ed25519 `--public-key` are mandatory. No latest
@@ -115,11 +127,12 @@ local `--directory` can supply artifacts. Both amd64/arm64 archives plus
 `--stage-dir` must be new and private and is required except for apply, which
 may allocate a private stage. `--verify-only` and `--preflight-only` do not
 install or execute binaries. `--root`/`--arch` are inspection-only. Root-only
-`--apply --yes` installs root-owned binaries, generated hardened units, a
-non-root panel service account, a root read-only Unix agent, native self-signed
-TLS, and 0600 entrance/bootstrap files generated as the service user. Defaults
-are `127.0.0.1:8443`; non-loopback requires `--allow-public-listen`, port 7800 is
-refused, and no firewall changes occur. Bootstrap is retrieved only through
+`--apply` with terminal `INSTALL` confirmation or `--yes` installs root-owned
+binaries, generated hardened units, a non-root panel service account, a root
+read-only Unix agent, native self-signed TLS, and 0600 entrance/bootstrap files
+generated as the service user. The default is `--host auto --port 8443`;
+non-loopback requires `--allow-public-listen`, port 7800 is refused, and firewall
+changes require the separate `--open-firewall` flag. Bootstrap is retrieved only through
 trusted SSH, never printed in installer logs. Success checks include active
 units, pinned HTTPS, entrance/UI, authenticated login, agent-backed system info
 and logout. Reruns refuse adoption; partial failure preserves state and requires
@@ -247,9 +260,11 @@ through the agent.
 ### 5.2 Transport
 
 HTTPS only, served by the panel itself; a managed web server is not a
-prerequisite. Installer apply defaults to `https://127.0.0.1:8443`, with an
-explicit canonical IP/port and exact origin. Non-loopback binds additionally
-require `--allow-public-listen`; port 7800 is refused and no firewall is changed.
+prerequisite. Installer apply defaults to `--host auto --port 8443`, selecting
+the default-route IPv4 source as its canonical IP and exact HTTPS origin.
+Non-loopback binds additionally require `--allow-public-listen`; port 7800 is
+refused. Firewall changes require separate `--open-firewall` consent and an
+already-active supported UFW; otherwise firewall configuration is unchanged.
 The installer creates a
 self-signed certificate containing the selected IP in its Subject Alternative
 Name and prints the fingerprint; self-signed encryption does not authenticate

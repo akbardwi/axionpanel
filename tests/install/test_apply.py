@@ -3,7 +3,18 @@ import argparse
 import contextlib
 import importlib.util
 import io
+import json
 import os
+import pty
+import select
+import shutil
+import sys
+import errno
+import http.client
+import http.cookies
+import ssl
+import textwrap
+import time
 from pathlib import Path
 import socket
 import stat
@@ -15,6 +26,7 @@ from unittest import mock
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
+
 
 
 def load_apply() -> Any:
@@ -57,11 +69,33 @@ class ApplyContract(unittest.TestCase):
     def args(self, *options):
         return parse_args(self.ap, *options)
 
+    def test_import_preserves_standard_tempfile_defaults_without_tmpdir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(os.environ)
+            env.pop('TMPDIR', None)
+            # Portable standard-library fallback, confined to a disposable fixture.
+            env['TMP'] = env['TEMP'] = tmp
+            code = textwrap.dedent('''
+                import pathlib, sys, tempfile
+                import tests.install.test_apply
+                assert tempfile.tempdir is None, 'test module overrides tempfile defaults'
+                with tempfile.TemporaryDirectory() as directory:
+                    assert pathlib.Path(directory).parent == pathlib.Path(sys.argv[1])
+                    (pathlib.Path(directory) / 'fixture').write_text('portable')
+            ''')
+            result = subprocess.run([sys.executable, '-B', '-c', code, tmp],
+                                    env=env, cwd=ROOT, capture_output=True,
+                                    text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
     def test_defaults_and_explicit_consent(self):
         args = self.args('--apply')
-        self.assertEqual((args.host, args.port, args.admin), ('127.0.0.1', 8443, 'admin'))
-        with self.assertRaisesRegex(RuntimeError, '--yes'):
-            self.ap.validate_apply(args)
+        self.assertEqual((args.host, args.port, args.admin), ('auto', 8443, 'admin'))
+        with mock.patch.object(self.ap, '_ap_open_tty', side_effect=RuntimeError('apply requires --yes when no terminal is available')), \
+             mock.patch.object(self.ap, '_ap_detect_host', return_value='127.0.0.1'):
+            with self.assertRaisesRegex(RuntimeError, '--yes|--host'):
+                self.ap.validate_apply(args)
         self.ap.validate_apply(self.args())
 
     def test_option_guards_precede_host_checks(self):
@@ -75,15 +109,15 @@ class ApplyContract(unittest.TestCase):
         with mock.patch.object(self.ap, '_ap_fresh_checks', side_effect=AssertionError('host touched')):
             for option in options:
                 with self.subTest(option=option), self.assertRaises(RuntimeError):
-                    self.ap.validate_apply(self.args('--apply', '--yes', *option))
+                    self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1', *option))
 
     def test_nonroot_rejected_before_host_checks(self):
         with mock.patch.object(self.ap.ap_os, 'geteuid', return_value=1000):
             with self.assertRaisesRegex(RuntimeError, 'root'):
-                self.ap.validate_apply(self.args('--apply', '--yes'))
+                self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
 
     def test_fake_root_and_arch_not_allowed(self):
-        args = self.args('--apply', '--yes')
+        args = self.args('--apply', '--yes', '--host', '127.0.0.1')
         for key, value in [('root', Path('/')), ('arch', 'amd64')]:
             setattr(args, key, value)
             with self.assertRaises(RuntimeError):
@@ -170,7 +204,7 @@ class ApplyContract(unittest.TestCase):
         analyzer = shutil.which('systemd-analyze')
         if not analyzer:
             self.skipTest('systemd-analyze unavailable')
-        panel, agent = self.ap._ap_units(self.args('--apply', '--yes'))
+        panel, agent = self.ap._ap_units(self.args('--apply', '--yes', '--host', '127.0.0.1'))
         with tempfile.TemporaryDirectory(prefix='apply-unit-') as tmp:
             root = Path(tmp)
             units = root / 'etc/systemd/system'
@@ -206,7 +240,7 @@ class ApplyContract(unittest.TestCase):
              mock.patch.object(self.ap, '_ap_lock', side_effect=lock), \
              mock.patch.object(self.ap, '_ap_provision') as provision:
             with self.assertRaises(RuntimeError):
-                self.ap.apply_install(self.args('--apply', '--yes'), contents)
+                self.ap.apply_install(self.args('--apply', '--yes', '--host', '127.0.0.1'), contents)
             provision.assert_not_called()
         self.assertEqual(events, ['fresh', 'lock', 'fresh'])
 
@@ -225,7 +259,7 @@ class ApplyContract(unittest.TestCase):
     def test_apply_revalidates_before_lock_or_mutation(self):
         with mock.patch.object(self.ap, '_ap_fresh_checks', side_effect=RuntimeError('not fresh')), mock.patch.object(self.ap, '_ap_lock') as lock:
             with self.assertRaisesRegex(RuntimeError, 'not fresh'):
-                self.ap.apply_install(self.args('--apply', '--yes'), {})
+                self.ap.apply_install(self.args('--apply', '--yes', '--host', '127.0.0.1'), {})
             lock.assert_not_called()
 
     def test_apply_is_mutually_exclusive_with_inspection_modes(self):
@@ -235,7 +269,7 @@ class ApplyContract(unittest.TestCase):
         for mode in ('--preflight-only', '--verify-only'):
             completed = subprocess.run(
                 ['bash', str(script), mode, '--apply', '--yes', '--version', '1.0.0',
-                 '--public-key', '/etc/hostname', '--directory', '/tmp'],
+                 '--public-key', '/etc/hostname', '--directory', tempfile.gettempdir()],
                 capture_output=True, text=True, timeout=60,
                 env={'PATH': '/usr/sbin:/usr/bin:/bin'})
             self.assertEqual(completed.returncode, 2, completed.stderr)
@@ -288,25 +322,25 @@ class ApplyContract(unittest.TestCase):
     def test_unsupported_os_denied_before_other_checks_or_mutation(self):
         with self.os_release_fixture(b'ID=ubuntu\nVERSION_ID="22.04"\n') as (_, pid1):
             with self.assertRaisesRegex(RuntimeError, 'unsupported OS'):
-                self.ap.validate_apply(self.args('--apply', '--yes'))
+                self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
             pid1.assert_not_called()
 
     def test_missing_os_release_denied(self):
         with self.os_release_fixture(None) as (_, pid1):
             with self.assertRaisesRegex(RuntimeError, 'prerequisites could not be checked'):
-                self.ap.validate_apply(self.args('--apply', '--yes'))
+                self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
             pid1.assert_not_called()
 
     def test_malformed_os_release_denied(self):
         with self.os_release_fixture(b'ID=ubuntu\nVERSION_ID="24.04"\nID=ubuntu\n') as (_, pid1):
             with self.assertRaisesRegex(RuntimeError, 'ambiguous os-release'):
-                self.ap.validate_apply(self.args('--apply', '--yes'))
+                self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
             pid1.assert_not_called()
 
     def test_unsupported_distro_denied(self):
         with self.os_release_fixture(b'ID=centos\nVERSION_ID="9"\n') as (_, pid1):
             with self.assertRaisesRegex(RuntimeError, 'unsupported OS'):
-                self.ap.validate_apply(self.args('--apply', '--yes'))
+                self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
             pid1.assert_not_called()
 
     def test_supported_os_accepted(self):
@@ -315,7 +349,7 @@ class ApplyContract(unittest.TestCase):
             with self.subTest(data=data):
                 with self.os_release_fixture(data) as (_, pid1):
                     with self.assertRaisesRegex(RuntimeError, 'OS accepted'):
-                        self.ap.validate_apply(self.args('--apply', '--yes'))
+                        self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
                     pid1.assert_called_once()
 
     def test_os_release_symlink_to_usr_lib_accepted(self):
@@ -324,25 +358,25 @@ class ApplyContract(unittest.TestCase):
                 (root / 'usr/lib/os-release').write_bytes(b'ID=ubuntu\nVERSION_ID="24.04"\n')
                 (root / 'etc/os-release').symlink_to(spelling)
                 with self.assertRaisesRegex(RuntimeError, 'OS accepted'):
-                    self.ap.validate_apply(self.args('--apply', '--yes'))
+                    self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
                 pid1.assert_called_once()
 
     def test_os_release_single_quotes_are_balanced(self):
         with self.os_release_fixture(b"ID='ubuntu'\nVERSION_ID='24.04'\n") as (_, pid1):
             with self.assertRaisesRegex(RuntimeError, 'OS accepted'):
-                self.ap.validate_apply(self.args('--apply', '--yes'))
+                self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
             pid1.assert_called_once()
         for data in (b"ID='ubuntu\nVERSION_ID=24.04\n",
                      b"ID=ubuntu\nVERSION_ID='24.04\n"):
             with self.subTest(data=data), self.os_release_fixture(data) as (_, pid1):
                 with self.assertRaisesRegex(RuntimeError, 'malformed os-release'):
-                    self.ap.validate_apply(self.args('--apply', '--yes'))
+                    self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
                 pid1.assert_not_called()
 
     def test_os_release_invalid_utf8_denied(self):
         with self.os_release_fixture(b'ID=ubuntu\nVERSION_ID="24.04"\n\xff\xfe\n') as (_, pid1):
             with self.assertRaisesRegex(RuntimeError, 'malformed os-release'):
-                self.ap.validate_apply(self.args('--apply', '--yes'))
+                self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
             pid1.assert_not_called()
 
     def test_malformed_relevant_os_assignments_cannot_hide_behind_valid_ones(self):
@@ -351,7 +385,7 @@ class ApplyContract(unittest.TestCase):
             with self.subTest(extra=extra), self.os_release_fixture(
                     b'ID=ubuntu\nVERSION_ID="24.04"\n' + extra) as (_, pid1):
                 with self.assertRaisesRegex(RuntimeError, 'malformed os-release'):
-                    self.ap.validate_apply(self.args('--apply', '--yes'))
+                    self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
                 pid1.assert_not_called()
 
     def test_os_release_bounds_and_unsafe_files_fail_closed(self):
@@ -389,7 +423,7 @@ class ApplyContract(unittest.TestCase):
                     elif kind == 'hardlink':
                         os.link(path, root / 'etc/alias')
                 with self.assertRaises(RuntimeError):
-                    self.ap.validate_apply(self.args('--apply', '--yes'))
+                    self.ap.validate_apply(self.args('--apply', '--yes', '--host', '127.0.0.1'))
                 pid1.assert_not_called()
 
     def test_os_validation_repeats_under_lock_before_provisioning(self):
@@ -416,9 +450,52 @@ class ApplyContract(unittest.TestCase):
                  mock.patch.object(self.ap, '_ap_provision') as provision:
                 contents = {name: b'authenticated' for name in self.ap._AP_MEMBERS}
                 with self.assertRaisesRegex(RuntimeError, 'refused before provisioning'):
-                    self.ap.apply_install(self.args('--apply', '--yes'), contents)
+                    self.ap.apply_install(self.args('--apply', '--yes', '--host', '127.0.0.1'), contents)
                 provision.assert_not_called()
                 self.assertEqual(events, ['supported', 'lock'])
+
+    def test_main_rejects_firewall_without_apply_before_acquisition(self):
+        text = (ROOT / 'install.sh').read_text().split("<<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
+        text = text.split('\ntry:\n    main()\n', 1)[0]
+        module = types.ModuleType('installer_main_options_test')
+        exec(compile(text, 'standalone-main', 'exec'), module.__dict__)
+        for mode in (('--verify-only',), ('--preflight-only',), ()):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp, \
+                 mock.patch.object(module.sys, 'argv', ['install.sh', *mode,
+                     '--version', '1.0.0', '--public-key', str(Path(tmp) / 'public.pem'),
+                     '--stage-dir', str(Path(tmp) / 'stage'), '--open-firewall']), \
+                 mock.patch.object(module, 'read_public_key', side_effect=AssertionError('key read')) as key, \
+                 mock.patch.object(module, 'acquire_sources', side_effect=AssertionError('acquired')) as acquire, \
+                 mock.patch.object(module, 'snapshot_inputs', side_effect=AssertionError('snapshot')) as snapshot, \
+                 mock.patch.object(module, 'open_stage_parent', side_effect=AssertionError('stage')) as stage, \
+                 mock.patch.object(module, '_ap_detect_host', side_effect=AssertionError('discovery')), \
+                 mock.patch.object(module.ap_os, 'geteuid', side_effect=AssertionError('root')), \
+                 mock.patch.object(module, '_ap_fresh_checks', side_effect=AssertionError('host')):
+                with self.assertRaisesRegex(RuntimeError, '--open-firewall requires --apply'):
+                    module.main()
+                for operation in (key, acquire, snapshot, stage):
+                    operation.assert_not_called()
+
+    def test_main_ordinary_inspection_validates_without_host_checks(self):
+        text = (ROOT / 'install.sh').read_text().split("<<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
+        text = text.split('\ntry:\n    main()\n', 1)[0]
+        module = types.ModuleType('installer_main_inspection_test')
+        exec(compile(text, 'standalone-main', 'exec'), module.__dict__)
+        for mode in (('--verify-only',), ('--preflight-only',), ()):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp, \
+                 mock.patch.object(module.sys, 'argv', ['install.sh', *mode,
+                     '--version', '1.0.0', '--public-key', str(Path(tmp) / 'public.pem'),
+                     '--stage-dir', str(Path(tmp) / 'stage')]), \
+                 mock.patch.object(module, 'validate_apply', wraps=module.validate_apply) as validate, \
+                 mock.patch.object(module, 'read_public_key', side_effect=RuntimeError('key boundary')) as key, \
+                 mock.patch.object(module, '_ap_detect_host', side_effect=AssertionError('discovery')), \
+                 mock.patch.object(module.ap_os, 'geteuid', side_effect=AssertionError('root')), \
+                 mock.patch.object(module, '_ap_fresh_checks', side_effect=AssertionError('host')):
+                with self.assertRaisesRegex(RuntimeError, 'key boundary'):
+                    module.main()
+                validate.assert_called_once()
+                key.assert_called_once()
+                self.assertEqual(list(Path(tmp).iterdir()), [])
 
     def test_main_refuses_unsupported_os_before_acquisition_or_stage_creation(self):
         text = (ROOT / 'install.sh').read_text().split("<<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
@@ -427,7 +504,8 @@ class ApplyContract(unittest.TestCase):
         exec(compile(text, 'standalone-main', 'exec'), module.__dict__)
         with mock.patch.object(module, 'parse_args', return_value=argparse.Namespace(
                 apply=True, preflight_only=False, verify_only=False, version='1.0.0',
-                arch=None, root=None, stage_dir=None, directory=None, download_base_url=None)), \
+                arch=None, root=None, stage_dir=None, directory=None, download_base_url=None, yes=True,
+                host='127.0.0.1', port=8443, admin='admin', open_firewall=False)), \
              mock.patch.object(module, '_ap_options'), \
              mock.patch.object(module, '_ap_read', return_value=b'ID=ubuntu\nVERSION_ID="22.04"\n'), \
              mock.patch.object(module, 'read_public_key') as key, \
@@ -438,7 +516,7 @@ class ApplyContract(unittest.TestCase):
                 module.main()
             for operation in (key, acquire, snapshot, stage):
                 operation.assert_not_called()
-    
+
 
     def test_state_files_created_under_runuser_are_normalized_private(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -508,11 +586,11 @@ class ApplyContract(unittest.TestCase):
     def test_payload_shape_rejected_before_lock(self):
         with mock.patch.object(self.ap, '_ap_fresh_checks'), mock.patch.object(self.ap, '_ap_lock') as lock:
             with self.assertRaisesRegex(RuntimeError, 'exact installer payload'):
-                self.ap.apply_install(self.args('--apply', '--yes'), {'axionpanel': b'x'})
+                self.ap.apply_install(self.args('--apply', '--yes', '--host', '127.0.0.1'), {'axionpanel': b'x'})
             lock.assert_not_called()
 
     def test_failure_stops_only_new_units_and_preserves_partial_state(self):
-        args = self.args('--apply', '--yes')
+        args = self.args('--apply', '--yes', '--host', '127.0.0.1')
         contents = {name: b'authenticated' for name in self.ap._AP_MEMBERS}
         commands = []
         def run(command):
@@ -533,8 +611,36 @@ class ApplyContract(unittest.TestCase):
         self.assertEqual(stopped, ['axionpanel.service', 'axionpanel-agent.service'])
         self.assertFalse(any('disable' in c or 'restart' in c or 'reset-failed' in c for c in commands))
 
+    def test_failure_cleanup_happens_before_lock_release(self):
+        held = False
+        events = []
+        @contextlib.contextmanager
+        def lock():
+            nonlocal held
+            held = True
+            try:
+                yield
+            finally:
+                held = False
+                events.append('unlock')
+        def run(command):
+            if 'start' in command and command[-1] == 'axionpanel.service':
+                raise RuntimeError('injected start failure')
+            if 'stop' in command:
+                events.append(('cleanup', held))
+            return b''
+        with mock.patch.object(self.ap, '_ap_fresh_checks'), \
+             mock.patch.object(self.ap, '_ap_lock', side_effect=lock), \
+             mock.patch.object(self.ap, '_ap_provision', return_value=991), \
+             mock.patch.object(self.ap, '_ap_run', side_effect=run), \
+             contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, 'manual reconciliation'):
+                self.ap.apply_install(self.args('--apply', '--yes', '--host', '127.0.0.1'),
+                                      {name: b'x' for name in self.ap._AP_MEMBERS})
+        self.assertEqual(events, [('cleanup', True), ('cleanup', True), 'unlock'])
+
     def test_read_only_checks_validate_optional_sysusers_ancestor_before_mutation(self):
-        args = self.args('--apply', '--yes')
+        args = self.args('--apply', '--yes', '--host', '127.0.0.1')
         checked = []
         def directory(path):
             checked.append(path)
@@ -649,7 +755,7 @@ class ApplyContract(unittest.TestCase):
             def read(path, limit, uid=0, private=False):
                 return reads[path]
 
-            args = parse_args(self.ap, '--apply', '--yes')
+            args = parse_args(self.ap, '--apply', '--yes', '--host', '127.0.0.1')
             with mock.patch.object(self.ap, '_ap_read', side_effect=read), \
                  mock.patch.object(self.ap.ap_http, 'HTTPSConnection', Connection):
                 try:
@@ -719,6 +825,713 @@ class ApplyContract(unittest.TestCase):
         self.assertEqual(logout_headers.get('Origin'), 'https://127.0.0.1:8443')
         self.assertTrue(all('untrusted_cookie' not in headers.get('Cookie', '')
                             for _, _, headers in seen))
+
+
+class DirectListenerDiscovery(unittest.TestCase):
+    """Direct identity, route discovery and explicit ufw consent."""
+
+    def setUp(self):
+        self.ap = load_apply()
+
+    def args(self, *options):
+        return parse_args(self.ap, '--apply', '--yes', *options)
+
+    def test_default_host_is_auto(self):
+        args = self.args()
+        self.assertEqual((args.host, args.open_firewall), ('auto', False))
+
+    def test_auto_requires_explicit_public_listen_consent(self):
+        args = self.args()
+        with mock.patch.object(self.ap, '_ap_detect_host', return_value='198.51.100.7'), \
+             mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0), \
+             mock.patch.object(self.ap, '_ap_fresh_checks') as fresh:
+            with self.assertRaisesRegex(RuntimeError, '--allow-public-listen'):
+                self.ap.validate_apply(args)
+            fresh.assert_not_called()
+
+    def test_auto_resolves_once_and_stays_pinned(self):
+        args = self.args('--allow-public-listen')
+        with mock.patch.object(self.ap, '_ap_detect_host', return_value='198.51.100.7') as detect, \
+             mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0), \
+             mock.patch.object(self.ap, '_ap_fresh_checks'):
+            self.ap.validate_apply(args)
+            self.ap.validate_apply(args)
+            detect.assert_called_once()
+        self.assertEqual(args.host, '198.51.100.7')
+
+    def test_unusable_detected_address_is_refused(self):
+        for value in ('127.0.0.1', '::1', '0.0.0.0', '::', '169.254.1.1', 'fe80::1',
+                      '224.0.0.5', '192.0.2.1.1', '198.51.100.07', '', 'localhost', '2001:db8::1'):
+            args = self.args('--allow-public-listen')
+            with self.subTest(value=value), \
+                 mock.patch.object(self.ap, '_ap_detect_host', return_value=value), \
+                 mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0), \
+                 mock.patch.object(self.ap, '_ap_fresh_checks') as fresh:
+                with self.assertRaisesRegex(RuntimeError, '--host'):
+                    self.ap.validate_apply(args)
+                fresh.assert_not_called()
+
+    def test_detection_probes_the_route_without_sending_traffic(self):
+        seen = {}
+
+        class Probe:
+            def __init__(self, family, kind):
+                seen['family'], seen['kind'] = family, kind
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                seen['closed'] = True
+
+            def connect(self, address):
+                seen['connect'] = address
+
+            def getsockname(self):
+                return ('198.51.100.7', 0)
+
+        with mock.patch.object(self.ap.ap_socket, 'socket', Probe):
+            self.assertEqual(self.ap._ap_detect_host(), '198.51.100.7')
+        self.assertEqual((seen['family'], seen['kind']),
+                         (self.ap.ap_socket.AF_INET, self.ap.ap_socket.SOCK_DGRAM))
+        target = self.ap.ap_ipaddress.ip_address(seen['connect'][0])
+        self.assertIn(target, self.ap.ap_ipaddress.ip_network('198.51.100.0/24'))
+        self.assertTrue(seen.get('closed'))
+
+    def test_detection_failure_names_the_explicit_alternative(self):
+        def fail(*args, **kwargs):
+            raise OSError('network unreachable')
+        with mock.patch.object(self.ap.ap_socket, 'socket', fail):
+            with self.assertRaisesRegex(RuntimeError, '--host'):
+                self.ap._ap_detect_host()
+
+    def test_explicit_loopback_host_needs_no_public_consent(self):
+        args = self.args('--host', '127.0.0.1')
+        with mock.patch.object(self.ap, '_ap_fresh_checks', side_effect=RuntimeError('checks reached')), \
+             mock.patch.object(self.ap, '_ap_detect_host', side_effect=AssertionError('probed')), \
+             mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0):
+            with self.assertRaisesRegex(RuntimeError, 'checks reached'):
+                self.ap.validate_apply(args)
+        self.assertEqual(args.host, '127.0.0.1')
+
+    def validated(self, *options):
+        args = self.args(*options)
+        with mock.patch.object(self.ap, '_ap_fresh_checks'), \
+             mock.patch.object(self.ap, '_ap_detect_host', side_effect=AssertionError('probed')), \
+             mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.ap.validate_apply(args)
+        return args
+
+    def test_yes_displays_the_full_plan_once_before_checks(self):
+        args = parse_args(self.ap, '--apply', '--yes', '--host', '127.0.0.1')
+        with mock.patch.object(self.ap, '_ap_fresh_checks'), \
+             mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.ap.validate_apply(args)
+            first_run = output.getvalue()
+            self.ap.validate_apply(args)
+        for text in ('Listen: 127.0.0.1:8443', 'Origin: https://127.0.0.1:8443',
+                     'Administrator: admin', 'Firewall: unchanged'):
+            with self.subTest(text=text):
+                self.assertEqual(first_run.count(text), 1)
+
+    def test_inspection_never_discovers_or_requires_root(self):
+        with mock.patch.object(self.ap, '_ap_detect_host', side_effect=AssertionError('discovery')), \
+             mock.patch.object(self.ap.ap_os, 'geteuid', side_effect=AssertionError('root')):
+            self.ap.validate_apply(parse_args(self.ap))
+
+    def test_public_ip_option_is_not_supported(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.args('--public-ip', '198.51.100.7')
+
+    def test_open_firewall_requires_apply_and_a_public_origin(self):
+        for option in (('--open-firewall',),):
+            with self.subTest(option=option), self.assertRaisesRegex(RuntimeError, '--apply'):
+                self.ap.validate_apply(parse_args(self.ap, *option))
+        for option in (('--host', '127.0.0.1', '--open-firewall'),
+                       ('--host', '::1', '--open-firewall')):
+            args = self.args(*option)
+            with self.subTest(option=option), \
+                 mock.patch.object(self.ap, '_ap_fresh_checks') as fresh, \
+                 mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0):
+                with self.assertRaisesRegex(RuntimeError, 'loopback'):
+                    self.ap.validate_apply(args)
+                fresh.assert_not_called()
+
+    def test_ufw_is_not_required_without_the_flag(self):
+        checked = []
+        args = self.validated('--host', '127.0.0.1')
+        with mock.patch.object(self.ap, '_ap_check_os'), \
+             mock.patch.object(self.ap, '_ap_check_pid1'), \
+             mock.patch.object(self.ap, '_ap_check_command', side_effect=checked.append), \
+             mock.patch.object(self.ap, '_ap_open_dir', return_value=7), \
+             mock.patch.object(self.ap.ap_os, 'close'), \
+             mock.patch.object(self.ap.ap_os.path, 'lexists', return_value=False), \
+             mock.patch.object(self.ap, '_ap_read', return_value=b''), \
+             mock.patch.object(self.ap.ap_pwd, 'getpwnam', side_effect=KeyError), \
+             mock.patch.object(self.ap.ap_grp, 'getgrnam', side_effect=KeyError), \
+             mock.patch.object(self.ap.ap_os, 'listdir', return_value=[]), \
+             mock.patch.object(self.ap, '_ap_run', return_value=b'not-found\n') as run, \
+             mock.patch.object(self.ap, '_ap_check_listener'):
+            self.ap._ap_fresh_checks(args)
+        self.assertNotIn('/usr/sbin/ufw', checked)
+        self.assertFalse(any(c[0][0][0] == '/usr/sbin/ufw' for c in run.call_args_list))
+
+    def test_ufw_preconditions_are_checked_read_only(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        for status in (b'Status: inactive\n', b'Status: reloading\n', b'', b'Status: active extra\n',
+                       b'Status: active\nTo Action From\n8443/tcp ALLOW Anywhere\n'):
+            with self.subTest(status=status), \
+                 mock.patch.object(self.ap, '_ap_check_command'), \
+                 mock.patch.object(self.ap, '_ap_run', return_value=status) as run:
+                with self.assertRaisesRegex(RuntimeError, 'ufw'):
+                    self.ap._ap_check_firewall(args)
+                self.assertEqual([c[0][0] for c in run.call_args_list], [['/usr/sbin/ufw', 'status']])
+        with mock.patch.object(self.ap, '_ap_check_command') as command, \
+             mock.patch.object(self.ap, '_ap_run', return_value=b'Status: active\n'):
+            self.assertIsNone(self.ap._ap_check_firewall(args))
+            command.assert_called_once_with('/usr/sbin/ufw')
+        with mock.patch.object(self.ap, '_ap_check_command'), \
+             mock.patch.object(self.ap, '_ap_run') as run:
+            self.ap._ap_check_firewall(self.validated('--host', '198.51.100.7', '--allow-public-listen'))
+            run.assert_not_called()
+
+    def test_ufw_refuses_existing_or_ambiguous_rules(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        for rule in ('8443/tcp ALLOW Anywhere',
+                     '8443/tcp (v6) DENY Anywhere (v6)',
+                     '8443/tcp LIMIT Anywhere',
+                     '8443/udp ALLOW Anywhere',
+                     '8443:8444/tcp ALLOW Anywhere',
+                     'Anywhere ALLOW Anywhere',
+                     'Panel ALLOW Anywhere',
+                     '8443/tcp ALLOW 10.0.0.0/8',
+                     '8443/tcp IN ALLOW Anywhere',
+                     '8443/tcp ALLOW Anywhere # operator',
+                     '443,8443/tcp ALLOW Anywhere',
+                     '22/tcp ALLOW nonsense',
+                     '22/tcp ALLOW',
+                     '22/tcp ALLOW Anywhere unexpected',
+                     'malformed', 'Status: inactive'):
+            status = ('Status: active\n\nTo                         Action      From\n'
+                      '--                         ------      ----\n' + rule + '\n').encode()
+            with self.subTest(rule=rule), mock.patch.object(self.ap, '_ap_run', return_value=status), \
+                 mock.patch.object(self.ap, '_ap_check_command'):
+                with self.assertRaisesRegex(RuntimeError, 'ufw'):
+                    self.ap._ap_check_firewall(args)
+
+    def test_ufw_accepts_unrelated_simple_rules(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        # Byte-for-byte the shapes a real `ufw status` prints, including a
+        # port range that does not cover the selected port.
+        status = (b'Status: active\n\nTo                         Action      From\n'
+                  b'--                         ------      ----\n'
+                  b'20/tcp                     ALLOW       Anywhere                  \n'
+                  b'888/tcp                    ALLOW       Anywhere                  \n'
+                  b'39000:40000/tcp            ALLOW       Anywhere                  \n'
+                  b'22/tcp (v6)                ALLOW       Anywhere (v6)             \n')
+        with mock.patch.object(self.ap, '_ap_run', return_value=status), \
+             mock.patch.object(self.ap, '_ap_check_command'):
+            self.ap._ap_check_firewall(args)
+
+    def test_ufw_refuses_a_range_covering_the_selected_port(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        status = (b'Status: active\n\nTo                         Action      From\n'
+                  b'--                         ------      ----\n'
+                  b'8440:8450/tcp              ALLOW       Anywhere                  \n')
+        with mock.patch.object(self.ap, '_ap_run', return_value=status), \
+             mock.patch.object(self.ap, '_ap_check_command'):
+            with self.assertRaisesRegex(RuntimeError, 'already has a rule for port 8443'):
+                self.ap._ap_check_firewall(args)
+
+    def test_fresh_checks_include_the_firewall_precondition(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        with mock.patch.object(self.ap, '_ap_check_os'), \
+             mock.patch.object(self.ap, '_ap_check_pid1'), \
+             mock.patch.object(self.ap, '_ap_check_command'), \
+             mock.patch.object(self.ap, '_ap_open_dir', return_value=7), \
+             mock.patch.object(self.ap.ap_os, 'close'), \
+             mock.patch.object(self.ap.ap_os.path, 'lexists', return_value=False), \
+             mock.patch.object(self.ap, '_ap_read', return_value=b''), \
+             mock.patch.object(self.ap.ap_pwd, 'getpwnam', side_effect=KeyError), \
+             mock.patch.object(self.ap.ap_grp, 'getgrnam', side_effect=KeyError), \
+             mock.patch.object(self.ap.ap_os, 'listdir', return_value=[]), \
+             mock.patch.object(self.ap, '_ap_run', return_value=b'not-found\n'), \
+             mock.patch.object(self.ap, '_ap_check_listener'), \
+             mock.patch.object(self.ap, '_ap_check_firewall', side_effect=RuntimeError('ufw inactive')) as firewall:
+            with self.assertRaisesRegex(RuntimeError, 'ufw inactive'):
+                self.ap._ap_fresh_checks(args)
+            firewall.assert_called_once_with(args)
+
+    def run_apply(self, args, fail_on=None, fail_delete=False):
+        contents = {name: b'authenticated' for name in self.ap._AP_MEMBERS}
+        events = []
+
+        def run(command):
+            command = list(command)
+            events.append(command)
+            if fail_delete and command[:2] == [self.ap._AP_UFW, 'delete']:
+                raise RuntimeError('ufw refuses')
+            if fail_on is not None and fail_on(command):
+                raise RuntimeError('sensitive captured output')
+            if command[:2] == [self.ap._AP_UFW, 'status']:
+                return b'Status: active\n'
+            if command[:2] == [self.ap._AP_UFW, 'allow']:
+                return b'Rule added\nRule added (v6)\n'
+            if command[:2] == [self.ap._AP_UFW, 'delete']:
+                return b'Rule deleted\nRule deleted (v6)\n'
+            return b''
+
+        def readiness(args, uid):
+            events.append(['readiness'])
+            return 'ff'
+        with mock.patch.object(self.ap, '_ap_fresh_checks'), \
+             mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0), \
+             mock.patch.object(self.ap, '_ap_lock', return_value=contextlib.nullcontext()), \
+             mock.patch.object(self.ap, '_ap_provision', side_effect=lambda *a: events.append(['provision']) or 991), \
+             mock.patch.object(self.ap, '_ap_run', side_effect=run), \
+             mock.patch.object(self.ap, '_ap_readiness', side_effect=readiness), \
+             mock.patch.object(self.ap.ap_subprocess, 'run') as real_run, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            try:
+                self.ap.apply_install(args, contents)
+                error = None
+            except RuntimeError as exc:
+                error = exc
+            real_run.assert_not_called()
+        return events, error, output.getvalue()
+
+    def test_firewall_rechecks_and_uses_an_owned_comment_for_rollback(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        commands = []
+
+        def run(command):
+            commands.append(list(command))
+            verb = {'allow': 'added', 'delete': 'deleted'}[command[1]]
+            return ('Rule %s\nRule %s (v6)\n' % (verb, verb)).encode()
+        with mock.patch.object(self.ap, '_ap_check_firewall') as check, \
+             mock.patch.object(self.ap, '_ap_run', side_effect=run):
+            self.ap._ap_open_firewall(args)
+            check.assert_called_once_with(args)
+            self.assertRegex(commands[-1][4], r'^axionpanel-install-[0-9a-f]{32}$')
+            self.assertTrue(self.ap._ap_rollback_firewall(args))
+        self.assertEqual(commands[0][:4], [self.ap._AP_UFW, 'allow', '8443/tcp', 'comment'])
+        self.assertEqual(commands[1], [self.ap._AP_UFW, 'delete', 'allow', '8443/tcp', 'comment', commands[0][4]])
+        self.assertEqual(commands[0][4], commands[1][5])
+        self.assertIn('comment', commands[1])
+        self.assertRegex(commands[1][5], r'^axionpanel-install-[0-9a-f]{32}$')
+        self.assertEqual(commands[1][3], '8443/tcp')
+        self.assertEqual(commands[1][4], 'comment')
+        self.assertEqual(len(commands[1]), 6)
+        self.assertTrue(self.ap._ap_rollback_firewall(args))
+        self.assertEqual(len(commands), 2)
+
+    def test_firewall_rollback_requires_explicit_delete_confirmation(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        with mock.patch.object(self.ap, '_ap_check_firewall'), \
+             mock.patch.object(self.ap, '_ap_run', return_value=b'Rule added\nRule added (v6)\n'):
+            self.ap._ap_open_firewall(args)
+        for outcome in (b'Could not delete non-existent rule\n', b'', b'Aborted\n', RuntimeError('delete failed')):
+            def reply(*_):
+                if isinstance(outcome, Exception):
+                    raise outcome
+                return outcome
+            with self.subTest(outcome=outcome), mock.patch.object(
+                    self.ap, '_ap_run', side_effect=reply) as run:
+                self.assertFalse(self.ap._ap_rollback_firewall(args))
+                run.assert_called_once()
+            self.assertEqual(args._firewall_rule, '8443/tcp')
+
+    def test_unconfirmed_firewall_add_is_not_reported_as_published(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        for output in (b'Skipping adding existing rule\n', b'', b'Rules updated\n'):
+            with self.subTest(output=output), mock.patch.object(self.ap, '_ap_check_firewall'), \
+                 mock.patch.object(self.ap, '_ap_run', return_value=output) as run:
+                with self.assertRaisesRegex(RuntimeError, 'did not confirm'):
+                    self.ap._ap_open_firewall(args)
+                # The intent was recorded before the command, so recovery can act.
+                self.assertEqual(run.call_args.args[0][:3], [self.ap._AP_UFW, 'allow', '8443/tcp'])
+                self.assertEqual(args._firewall_rule, '8443/tcp')
+
+    def test_one_address_is_bind_origin_certificate_and_readiness_target(self):
+        args = self.args('--apply', '--host', '10.0.0.219', '--port', '9443', '--allow-public-listen')
+        try:
+            flags = self.ap._ap_serve_flags(args)
+            units = self.ap._ap_units(args)
+        except Exception as error:
+            self.fail('unit derivation failed: %s' % error)
+        self.assertEqual(flags[:4], ['-addr', '10.0.0.219:9443', '-origin', 'https://10.0.0.219:9443'])
+        self.assertNotIn('0.0.0.0', ' '.join(flags))
+        self.assertNotIn('::', json.dumps(flags))
+        panel, agent = units
+        self.assertIn('ExecStart=/usr/local/axionpanel/bin/axionpanel ' + ' '.join(flags), panel)
+        # The generated certificate SAN is the same single address.
+        source = (ROOT / 'scripts/installer_apply.py').read_text()
+        self.assertIn("'-init-tls', '-tls-host', args.host", source)
+        self.assertNotIn('public_ip', source)
+        self.assertNotIn('_ap_bind_host', source)
+
+    def test_success_summary_labels_a_non_global_origin_local(self):
+        args = self.validated('--host', '10.0.0.219', '--allow-public-listen', '--port', '9443')
+        _, error, output = self.run_apply(args)
+        self.assertIsNone(error)
+        self.assertIn('Origin: https://10.0.0.219:9443 (LOCAL address; external reachability is not guaranteed)',
+                      output)
+
+    def test_ufw_rejects_empty_or_untrusted_script_before_execution(self):
+        for content in (b'', b'#!/usr/bin/env python3\n', b'#!/bin/sh\n'):
+            with self.subTest(content=content), \
+                 mock.patch.object(self.ap, '_ap_check_command'), \
+                 mock.patch.object(self.ap, '_ap_read', return_value=content), \
+                 mock.patch.object(self.ap.ap_subprocess, 'run') as run:
+                with self.assertRaisesRegex(RuntimeError, 'unsupported ufw executable'):
+                    self.ap._ap_run([self.ap._AP_UFW, 'status'])
+                run.assert_not_called()
+
+    def test_ufw_executes_with_isolated_trusted_python(self):
+
+        result = subprocess.CompletedProcess([], 0, b'Status: active\n', b'')
+        with mock.patch.object(self.ap, '_ap_check_command') as check, \
+             mock.patch.object(self.ap, '_ap_read', return_value=b'#!/usr/bin/python3\n'), \
+             mock.patch.object(self.ap.ap_subprocess, 'run', return_value=result) as run:
+            self.ap._ap_run([self.ap._AP_UFW, 'status'])
+        self.assertIn(mock.call('/usr/bin/python3'), check.call_args_list)
+        self.assertEqual(run.call_args.args[0], ['/usr/bin/python3', '-I', '-B', self.ap._AP_UFW, 'status'])
+        self.assertEqual(run.call_args.kwargs['env'], {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin',
+                                                    'LANG': 'C', 'LC_ALL': 'C', 'HOME': '/root'})
+
+    def test_firewall_opens_only_after_local_readiness(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        events, error, _ = self.run_apply(args)
+        self.assertIsNone(error)
+        allow = next(i for i, c in enumerate(events) if c[:3] == [self.ap._AP_UFW, 'allow', '8443/tcp'])
+        self.assertLess(events.index(['readiness']), allow)
+        self.assertLess(events.index(['provision']), allow)
+        enable = [i for i, c in enumerate(events) if 'enable' in c]
+        self.assertTrue(enable and enable[0] > allow)
+
+    def test_no_firewall_command_when_the_panel_never_became_ready(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        events, error, _ = self.run_apply(
+            args, fail_on=lambda c: 'start' in c and c[-1] == 'axionpanel.service')
+        self.assertRegex(str(error), 'partial data preserved')
+        self.assertNotIn('sensitive', str(error))
+        self.assertFalse(any(c[0] == self.ap._AP_UFW for c in events))
+
+    def test_firewall_rule_is_removed_when_a_later_step_fails(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        events, error, _ = self.run_apply(args, fail_on=lambda c: 'enable' in c)
+        self.assertRegex(str(error), 'partial data preserved')
+        self.assertRegex(str(error), 'firewall rule 8443/tcp removed')
+        self.assertNotIn('not removed', str(error))
+        ufw = [c for c in events if c[0] == self.ap._AP_UFW]
+        self.assertEqual(ufw[0], [self.ap._AP_UFW, 'status'])
+        self.assertEqual(ufw[1][:4], [self.ap._AP_UFW, 'allow', '8443/tcp', 'comment'])
+        self.assertEqual(ufw[2], [self.ap._AP_UFW, 'delete', 'allow', '8443/tcp', 'comment', ufw[1][4]])
+        self.assertFalse(any(c[0] == self.ap._AP_UFW and c[1] in ('disable', 'reset', 'default', 'enable', 'reload')
+                             for c in events))
+
+    def test_firewall_rule_is_kept_on_success_and_absent_without_the_flag(self):
+        for options, expected in ((('--open-firewall',), 2), ((), 0)):
+            with self.subTest(options=options):
+                args = self.validated('--host', '198.51.100.7', '--allow-public-listen', *options)
+                events, error, output = self.run_apply(args)
+                self.assertIsNone(error)
+                self.assertEqual(sum(c[0] == self.ap._AP_UFW for c in events), expected)
+                self.assertFalse(any('delete' in c for c in events))
+                self.assertIn('Firewall: ' + ('ufw allow 8443/tcp' if expected else 'unchanged'), output)
+
+    def test_firewall_rollback_reports_when_the_delete_command_fails(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        _, error, _ = self.run_apply(args, fail_on=lambda c: 'enable' in c, fail_delete=True)
+        self.assertRegex(str(error), 'firewall rule 8443/tcp was not removed')
+
+    def test_failed_allow_command_is_still_rolled_back(self):
+        args = self.validated('--host', '198.51.100.7', '--allow-public-listen', '--open-firewall')
+        events, error, _ = self.run_apply(args, fail_on=lambda c: c[:2] == [self.ap._AP_UFW, 'allow'])
+        self.assertRegex(str(error), 'partial data preserved')
+        self.assertTrue(any(c[:4] == [self.ap._AP_UFW, 'delete', 'allow', '8443/tcp'] and c[4] == 'comment' for c in events))
+
+    class Terminal:
+        def __init__(self, answer):
+            self.answer, self.written, self.closed = answer, '', False
+
+        def write(self, text):
+            self.written += text
+
+        def flush(self):
+            pass
+
+        def readline(self):
+            return self.answer
+
+        def close(self):
+            self.closed = True
+
+    def test_real_controlling_terminal_confirmation_and_cancellation(self):
+        # A new session acquires this private PTY; stdin deliberately disagrees
+        # with the terminal answer. Only host/root checks are mocked.
+        child_code = textwrap.dedent('''
+            import fcntl, os, sys, termios
+            from unittest import mock
+            from tests.install.test_apply import load_apply, parse_args
+            os.setsid()
+            slave = int(sys.argv[1])
+            fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+            # Keep the slave alive until /dev/tty is opened (no master EIO gap).
+            ap = load_apply()
+            args = parse_args(ap, '--apply', '--host', '127.0.0.1')
+            before = len(os.listdir('/proc/self/fd'))
+            with mock.patch.object(ap.ap_os, 'geteuid', return_value=0), \\
+                 mock.patch.object(ap, '_ap_fresh_checks') as fresh:
+                try:
+                    ap.validate_apply(args)
+                except RuntimeError as exc:
+                    assert str(exc) == 'installation not confirmed', str(exc)
+                    assert not args.yes
+                    fresh.assert_not_called()
+                    result = 'cancelled'
+                else:
+                    assert args.yes
+                    fresh.assert_called_once_with(args)
+                    result = 'confirmed'
+            assert len(os.listdir('/proc/self/fd')) == before, 'terminal descriptor leak'
+            os.close(slave)
+            print(result, flush=True)
+        ''')
+        for answer, expected in (('INSTALL\n', 'confirmed'), ('no\n', 'cancelled')):
+            with self.subTest(answer=answer):
+                master, slave = pty.openpty()
+                child = None
+                terminal_output = b''
+                try:
+                    child = subprocess.Popen(
+                        [sys.executable, '-B', '-c', child_code, str(slave)],
+                        pass_fds=(slave,), cwd=ROOT, stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    os.close(slave)
+                    slave = None
+                    assert child.stdin is not None
+                    # stdin disagrees with the terminal on purpose.
+                    child.stdin.write(b'no\n' if expected == 'confirmed' else b'INSTALL\n')
+                    child.stdin.close()
+                    child.stdin = None
+                    deadline = time.monotonic() + 10
+                    while b'Type INSTALL to continue: ' not in terminal_output:
+                        remaining = deadline - time.monotonic()
+                        self.assertGreater(remaining, 0, 'terminal prompt timed out')
+                        if not select.select([master], [], [], remaining)[0]:
+                            self.fail('terminal prompt timed out')
+                        try:
+                            data = os.read(master, 65536)
+                        except OSError as exc:
+                            if exc.errno != errno.EIO:
+                                raise
+                            break
+                        if not data:
+                            break
+                        terminal_output += data
+                    if b'Type INSTALL to continue: ' in terminal_output:
+                        os.write(master, answer.encode())
+                    stdout, stderr = child.communicate(timeout=10)
+                    self.assertEqual(child.returncode, 0, stderr.decode())
+                    self.assertEqual(stdout.decode().strip(), expected)
+                    self.assertIn(b'Listen: 127.0.0.1:8443', terminal_output)
+                    self.assertIn(b'Firewall: unchanged', terminal_output)
+                finally:
+                    if child is not None:
+                        if child.poll() is None:
+                            child.kill()
+                        child.communicate(timeout=10)
+                    os.close(master)
+                    if slave is not None:
+                        os.close(slave)
+
+    def test_missing_yes_without_a_terminal_is_refused(self):
+        args = parse_args(self.ap, '--apply', '--host', '127.0.0.1')
+        with mock.patch.object(self.ap, '_ap_open_tty', side_effect=RuntimeError('apply requires --yes when no terminal is available')), \
+             mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0), \
+             mock.patch.object(self.ap, '_ap_fresh_checks') as fresh:
+            with self.assertRaisesRegex(RuntimeError, '--yes'):
+                self.ap.validate_apply(args)
+            fresh.assert_not_called()
+        self.assertFalse(args.yes)
+
+    def test_interactive_confirmation_shows_the_resolved_plan(self):
+        terminal = self.Terminal('INSTALL\n')
+        args = parse_args(self.ap, '--apply', '--host', '10.0.0.219',
+                          '--allow-public-listen', '--open-firewall')
+        with mock.patch.object(self.ap, '_ap_open_tty', return_value=(terminal, terminal)), \
+             mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0), \
+             mock.patch.object(self.ap, '_ap_fresh_checks') as fresh:
+            self.ap.validate_apply(args)
+            fresh.assert_called_once()
+        self.assertTrue(args.yes)
+        self.assertTrue(terminal.closed)
+        for text in ('Listen: 10.0.0.219:8443', 'Origin: https://10.0.0.219:8443',
+                     'Firewall: ufw allow 8443/tcp', 'LOCAL', 'external reachability is not guaranteed'):
+            self.assertIn(text, terminal.written)
+
+    def test_interactive_confirmation_detects_before_asking(self):
+        terminal = self.Terminal('INSTALL\n')
+        args = parse_args(self.ap, '--apply', '--allow-public-listen')
+        with mock.patch.object(self.ap, '_ap_open_tty', return_value=(terminal, terminal)), \
+             mock.patch.object(self.ap, '_ap_detect_host', return_value='10.0.0.219'), \
+             mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0), \
+             mock.patch.object(self.ap, '_ap_fresh_checks'):
+            self.ap.validate_apply(args)
+        self.assertIn('Origin: https://10.0.0.219:8443', terminal.written)
+        self.assertIn('Firewall: unchanged', terminal.written)
+
+    def test_anything_but_yes_declines_before_host_checks(self):
+        for answer in ('no\n', 'y\n', 'YES please\n', '', 'yes yes\n'):
+            terminal = self.Terminal(answer)
+            args = parse_args(self.ap, '--apply', '--host', '127.0.0.1')
+            with self.subTest(answer=answer), \
+                 mock.patch.object(self.ap, '_ap_open_tty', return_value=(terminal, terminal)), \
+                 mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0), \
+                 mock.patch.object(self.ap, '_ap_fresh_checks') as fresh:
+                with self.assertRaisesRegex(RuntimeError, 'not confirmed'):
+                    self.ap.validate_apply(args)
+                fresh.assert_not_called()
+            self.assertFalse(args.yes)
+            self.assertTrue(terminal.closed)
+
+    def test_invalid_options_are_refused_before_prompting(self):
+        args = parse_args(self.ap, '--apply', '--host', '198.51.100.7')
+        with mock.patch.object(self.ap, '_ap_open_tty') as tty, \
+             mock.patch.object(self.ap.ap_os, 'geteuid', return_value=0):
+            with self.assertRaisesRegex(RuntimeError, '--allow-public-listen'):
+                self.ap.validate_apply(args)
+            tty.assert_not_called()
+        self.assertFalse(args.yes)
+
+    def test_ufw_path_is_trusted_but_no_other_firewall_tool_is(self):
+        self.assertEqual(self.ap._AP_UFW, '/usr/sbin/ufw')
+        self.assertNotIn(self.ap._AP_UFW, self.ap._AP_COMMANDS)
+        for path in ('/usr/local/sbin/ufw', '/usr/sbin/iptables', '/usr/sbin/nft',
+                     '/usr/bin/firewall-cmd'):
+            with self.subTest(path=path), self.assertRaisesRegex(RuntimeError, 'untrusted'):
+                self.ap._ap_check_command(path)
+
+
+class NativeHttpsIntegration(unittest.TestCase):
+    """Built panel + production readiness over real TLS; not systemd apply."""
+
+    def test_native_https_missing_ui_build_fails_closed(self):
+        if (ROOT / 'web/dist/index.html').is_file():
+            self.skipTest('built UI present; missing-build gate requires placeholder-only checkout')
+        self._native_https_readiness(built_ui=False)
+
+    def test_native_https_built_ui_reaches_and_enforces_real_agent_gate(self):
+        if not (ROOT / 'web/dist/index.html').is_file():
+            self.skipTest('production-bundle gate requires make web; missing-build gate tested separately')
+        self._native_https_readiness(built_ui=True)
+
+    def _native_https_readiness(self, built_ui):
+        if shutil.which('go') is None:
+            self.skipTest('Go toolchain unavailable')
+        with tempfile.TemporaryDirectory(prefix='ap-https-') as directory:
+            root = Path(directory)
+            binary = root / 'panel'
+            build = subprocess.run(['go', 'build', '-o', str(binary), './cmd/panel'],
+                                   cwd=ROOT, capture_output=True, timeout=300)
+            self.assertEqual(build.returncode, 0, build.stderr[-2000:])
+            with socket.socket() as probe:
+                probe.bind(('127.0.0.1', 0))
+                port = probe.getsockname()[1]
+            self.assertNotIn(port, {80, 888, 3306, 21, 35460, 7800})
+            origin = 'https://127.0.0.1:%d' % port
+            cert, key = root / 'panel.crt', root / 'panel.key'
+            entrance, bootstrap = root / 'entrance', root / 'bootstrap.json'
+            flags = ['-db', str(root / 'panel.db'), '-origin', origin,
+                     '-entrance-file', str(entrance), '-secret-key', str(root / 'secret.key'),
+                     '-agent-socket', str(root / 'absent.sock')]
+            for command in (
+                ['-init-tls', '-tls-host', '127.0.0.1', '-tls-cert', str(cert), '-tls-key', str(key)],
+                ['-init-entrance', '-entrance-file', str(entrance)],
+                flags + ['-bootstrap-admin', 'admin', '-bootstrap-out', str(bootstrap)],
+            ):
+                result = subprocess.run([str(binary)] + command, capture_output=True, timeout=60)
+                self.assertEqual(result.returncode, 0, result.stderr[-2000:])
+            process = subprocess.Popen([str(binary)] + flags +
+                ['-addr', '127.0.0.1:%d' % port, '-tls-cert', str(cert), '-tls-key', str(key)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                deadline = time.monotonic() + 15
+                while True:
+                    try:
+                        with socket.create_connection(('127.0.0.1', port), timeout=1):
+                            break
+                    except OSError:
+                        if time.monotonic() >= deadline or process.poll() is not None:
+                            self.fail('isolated panel failed to listen')
+                        time.sleep(0.1)
+                module = load_apply()
+                args = parse_args(module, '--apply', '--yes', '--host', '127.0.0.1', '--port', str(port))
+                files = {module._AP_STATE + '/bootstrap.json': bootstrap, module._AP_CERT: cert}
+
+                def read(path, limit, uid=0, private=False):
+                    if path.endswith('/bootstrap.json'):
+                        self.assertTrue(private)
+                    data = files[path].read_bytes()
+                    self.assertLessEqual(len(data), limit)
+                    return data
+
+                def fetch_login():
+                    # Independent pinned-TLS observation of the exact response
+                    # /login serves in this checkout, behind the same entrance
+                    # gate; no production helper or readiness check is replaced.
+                    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                    context.load_verify_locations(cadata=cert.read_text())
+                    entrance_path = json.loads(bootstrap.read_bytes())['entrance_path']
+                    headers = {'Origin': origin, 'Host': '127.0.0.1:%d' % port}
+                    for path in (entrance_path, '/login'):
+                        connection = http.client.HTTPSConnection(
+                            '127.0.0.1', port, context=context, timeout=5)
+                        try:
+                            connection.connect()
+                            self.assertEqual(connection.sock.getpeercert(binary_form=True),
+                                             ssl.PEM_cert_to_DER_cert(cert.read_text()))
+                            connection.request('GET', path, headers=headers)
+                            response = connection.getresponse()
+                            body = response.read(1024 * 1024)
+                            if path == entrance_path:
+                                self.assertEqual(response.status, 303)
+                                gate = http.cookies.SimpleCookie()
+                                gate.load(response.getheader('Set-Cookie', ''))
+                                headers['Cookie'] = 'axp_entrance=' + gate['axp_entrance'].value
+                        finally:
+                            connection.close()
+                    return response.status, body
+
+                state = 'built-production-bundle' if built_ui else 'missing-ui-build'
+                expected = ('^authenticated agent-backed system information readiness failed$'
+                            if built_ui else '^login UI readiness failed$')
+                with self.subTest(ui=state), mock.patch.object(module, '_ap_read', side_effect=read):
+                    # With a bundle, SAN/pin, entrance, UI, health and login
+                    # must all pass before the absent Unix agent fails closed.
+                    # A placeholder-only checkout must instead fail at the UI
+                    # gate; ordinary tests do not require ignored build output.
+                    with self.assertRaisesRegex(RuntimeError, expected):
+                        module._ap_readiness(args, os.geteuid())
+                status, body = fetch_login()
+                if built_ui:
+                    self.assertEqual(status, 200)
+                    self.assertIn(b'<html', body.lower())
+                else:
+                    # Exact actionable response documented by internal/webui.
+                    self.assertEqual(status, 503)
+                    self.assertEqual(body, b'UI build missing; run make web and rebuild the panel.\n')
+                    self.assertNotIn(b'<html', body.lower())
+            finally:
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=10)
 
 
 if __name__ == '__main__':

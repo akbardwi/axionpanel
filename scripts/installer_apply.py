@@ -59,34 +59,190 @@ _AP_COMMANDS = (
 
 def add_apply_arguments(parser):
     parser.add_argument('--yes', action='store_true', help='consent to fresh-host provisioning')
-    parser.add_argument('--host', default='127.0.0.1', help='canonical native HTTPS IP address')
+    parser.add_argument('--host', default='auto', help='auto (default route), an IP address, or 127.0.0.1')
+    parser.add_argument('--open-firewall', action='store_true',
+                        help='with --apply, add one ufw allow rule after the panel is ready')
     parser.add_argument('--port', type=int, default=8443, help='unprivileged native HTTPS port (not 7800)')
     parser.add_argument('--allow-public-listen', action='store_true', help='explicitly permit a non-loopback listener')
     parser.add_argument('--admin', default='admin', help='first administrator username')
 
 
-def _ap_options(args):
-    if not args.yes:
-        raise RuntimeError('apply requires --yes')
-    if getattr(args, 'root', None) is not None or getattr(args, 'arch', None) is not None:
-        raise RuntimeError('--root and --arch are inspection-only')
+_AP_UFW = '/usr/sbin/ufw'
+_AP_PROBE = ('198.51.100.1', 53)
+_AP_ADDRESS_ERROR = 'host must be a canonical unicast IP address'
+_AP_UFW_AMBIGUOUS = 'ambiguous ufw rule; manage the firewall manually'
+# A single port, a range or a comma-separated list of either.
+_AP_UFW_PORTS = r'[0-9]+(?::[0-9]+)?(?:,[0-9]+(?::[0-9]+)?)*'
+
+
+def _ap_canonical_address(value):
     try:
-        ip = ap_ipaddress.ip_address(args.host)
+        ip = ap_ipaddress.ip_address(value)
     except ValueError:
-        raise RuntimeError('host must be a canonical IP address') from None
-    # Canonical Python spelling rejects zero-compressed IPv6 and other aliases.
+        raise RuntimeError(_AP_ADDRESS_ERROR) from None
+    # Require the canonical compressed IPv6 spelling and reject aliases.
     # A fixed listener identity must not be multicast, unspecified, reserved,
     # link-local or IPv4-mapped IPv6; loopback and private unicast are valid.
-    unusable = (str(ip) != args.host or '%' in args.host or ip.is_multicast or
-                ip.is_unspecified or (ip.is_reserved and not ip.is_loopback) or ip.is_link_local or
-                (ip.version == 6 and getattr(ip, 'ipv4_mapped', None) is not None))
-    if unusable:
-        raise RuntimeError('host must be a canonical unicast IP address')
+    if (str(ip) != value or '%' in value or ip.is_multicast or ip.is_unspecified or
+            (ip.is_reserved and not ip.is_loopback) or ip.is_link_local or
+            (ip.version == 6 and getattr(ip, 'ipv4_mapped', None) is not None)):
+        raise RuntimeError(_AP_ADDRESS_ERROR)
+    return ip
+
+
+def _ap_detect_host():
+    """Ask the kernel for the default-route IPv4 source address; send no traffic.
+
+    A connected UDP socket resolves the routing decision without transmitting,
+    querying DNS or contacting an external "what is my IP" service.
+    """
+    try:
+        with ap_socket.socket(ap_socket.AF_INET, ap_socket.SOCK_DGRAM) as probe:
+            probe.connect(_AP_PROBE)
+            address = probe.getsockname()[0]
+    except OSError:
+        raise RuntimeError('no default route found; pass --host with an address, or --host 127.0.0.1') from None
+    if _AP_PROBE[0] != address:
+        return address
+    raise RuntimeError('default route reports a probe address; pass --host explicitly')
+
+
+def _ap_ufw_rule_ports(line):
+    """Numeric port spans in a UFW status line's ``To`` field.
+
+    ``None`` means the rule covers every port. Raises for any destination that
+    is not plainly numeric: an app profile or interface policy must never be
+    mistaken for the installer-owned rule during rollback.
+    """
+    tokens = line.split()
+    index = next((i for i, token in enumerate(tokens)
+                  if token in ('ALLOW', 'DENY', 'REJECT', 'LIMIT')), None)
+    if index is None:
+        raise RuntimeError(_AP_UFW_AMBIGUOUS)
+    _ap_ufw_source(' '.join(tokens[index + 1:]))
+    text = ' '.join(tokens[:index])
+    if text.endswith(' (v6)'):
+        text = text[:-len(' (v6)')]
+    if text == 'Anywhere':
+        return None
+    if '/' in text:
+        text, _, protocol = text.rpartition('/')
+        if protocol not in ('tcp', 'udp'):
+            raise RuntimeError(_AP_UFW_AMBIGUOUS)
+    if not ap_re.fullmatch(_AP_UFW_PORTS, text, flags=ap_re.ASCII):
+        raise RuntimeError(_AP_UFW_AMBIGUOUS)
+    spans = []
+    for part in text.split(','):
+        low, _, high = part.partition(':')
+        start, end = int(low), int(high) if high else int(low)
+        if not 1 <= start <= end <= 65535:
+            raise RuntimeError(_AP_UFW_AMBIGUOUS)
+        spans.append((start, end))
+    return spans
+
+
+def _ap_ufw_source(text):
+    """Validate a UFW ``From`` field: Anywhere, an address or a prefixed network."""
+    if text.endswith(' (v6)'):
+        text = text[:-len(' (v6)')]
+    if text.startswith('(') and text.endswith(')'):
+        # An interface-bound rule such as '(eth0)'.
+        text = text[1:-1]
+    source, _, interface = text.partition(' on ')
+    if interface and not ap_re.fullmatch(r'[A-Za-z0-9_.:+-]+', interface, flags=ap_re.ASCII):
+        raise RuntimeError(_AP_UFW_AMBIGUOUS)
+    if interface and not source:
+        raise RuntimeError(_AP_UFW_AMBIGUOUS)
+    if source == 'Anywhere':
+        return
+    try:
+        ap_ipaddress.ip_network(source, strict=False)
+    except ValueError:
+        raise RuntimeError(_AP_UFW_AMBIGUOUS) from None
+
+
+def _ap_firewall_plan(args):
+    return 'ufw allow %d/tcp' % args.port if args.open_firewall else 'unchanged'
+
+
+def _ap_check_firewall(args):
+    """Read-only UFW preconditions: active, unambiguous, no selected port rule."""
+    if not args.open_firewall:
+        return
+    _ap_check_command(_AP_UFW)
+    try:
+        lines = _ap_run([_AP_UFW, 'status']).decode('ascii').splitlines()
+    except UnicodeError:
+        raise RuntimeError('ambiguous ufw status; manage the firewall manually') from None
+    if not lines or lines[0] != 'Status: active':
+        raise RuntimeError('--open-firewall requires an active ufw firewall; it is never enabled or reset')
+    rest = [line.strip() for line in lines[1:] if line.strip()]
+    if not rest:
+        return
+    if (len(rest) < 2 or rest[0].split() != ['To', 'Action', 'From'] or
+            rest[1].split() != ['--', '------', '----']):
+        raise RuntimeError('ambiguous ufw status; manage the firewall manually')
+    # Any rule already covering the selected port is refused whatever its
+    # action or protocol, and any destination that cannot be read as numeric
+    # ports (app profile, interface, unparsable text) is treated as ambiguous.
+    for line in rest[2:]:
+        ports = _ap_ufw_rule_ports(line.split(' # ', 1)[0])
+        if ports is None or any(low <= args.port <= high for low, high in ports):
+            raise RuntimeError('ufw already has a rule for port %d; refusing adoption' % args.port)
+
+
+def _ap_open_firewall(args):
+    # Recheck immediately before publishing, not only during earlier validation.
+    _ap_check_firewall(args)
+    rule = '%d/tcp' % args.port
+    comment = 'axionpanel-install-' + ap_os.urandom(16).hex()
+    # The invocation-specific comment is part of UFW's rule identity.
+    args._firewall_rule = rule
+    args._firewall_comment = comment
+    output = _ap_run([_AP_UFW, 'allow', rule, 'comment', comment])
+    if output.splitlines() not in ([b'Rule added'], [b'Rule added', b'Rule added (v6)']):
+        raise RuntimeError('ufw did not confirm a newly added rule; manual reconciliation required')
+
+
+def _ap_rollback_firewall(args):
+    rule = getattr(args, '_firewall_rule', None)
+    if rule is None:
+        return True
+    comment = getattr(args, '_firewall_comment', None)
+    if not comment:
+        return False
+    try:
+        output = _ap_run([_AP_UFW, 'delete', 'allow', rule, 'comment', comment])
+        if output.splitlines() not in ([b'Rule deleted'], [b'Rule deleted', b'Rule deleted (v6)']):
+            return False
+    except RuntimeError:
+        return False
+    args._firewall_rule = None
+    args._firewall_comment = None
+    return True
+
+
+def _ap_options(args):
+    if not args.apply:
+        if args.open_firewall:
+            raise RuntimeError('--open-firewall requires --apply')
+        return
+    if args.host == 'auto':
+        detected = _ap_detect_host()
+        try:
+            ip = _ap_canonical_address(detected)
+            if ip.version != 4 or ip.is_loopback:
+                raise RuntimeError('unusable route')
+        except RuntimeError:
+            raise RuntimeError('unusable detected address; pass --host explicitly') from None
+        args.host = detected
+    ip = _ap_canonical_address(args.host)
     if not ip.is_loopback and not args.allow_public_listen:
         raise RuntimeError('non-loopback listener requires --allow-public-listen')
-    # Unspecified binds cannot supply a usable browser origin/certificate identity.
-    if ip.is_unspecified:
-        raise RuntimeError('unspecified host is not a browser origin')
+    if args.open_firewall and ip.is_loopback:
+        raise RuntimeError('--open-firewall is not allowed for loopback')
+    if getattr(args, 'root', None) is not None or getattr(args, 'arch', None) is not None:
+        raise RuntimeError('--root and --arch are inspection-only')
     if isinstance(args.port, bool) or not isinstance(args.port, int) or not 1024 <= args.port <= 65535 or args.port == 7800:
         raise RuntimeError('port must be 1024..65535 and not 7800')
     if not ap_re.fullmatch(r'[A-Za-z][A-Za-z0-9_.-]{0,63}', args.admin, flags=ap_re.ASCII):
@@ -95,11 +251,58 @@ def _ap_options(args):
         raise RuntimeError('apply requires root')
 
 
+def _ap_open_tty():
+    # Text update mode requires seeking; terminals need independent streams.
+    with ap_contextlib.ExitStack() as streams:
+        try:
+            reader = streams.enter_context(open('/dev/tty', 'r', errors='replace'))
+            writer = streams.enter_context(open('/dev/tty', 'w', buffering=1, errors='replace'))
+        except OSError:
+            raise RuntimeError('apply requires --yes when no terminal is available') from None
+        streams.pop_all()  # Both streams now belong to the confirmation caller.
+        return reader, writer
+
+
+def _ap_plan(args):
+    local = not _ap_canonical_address(args.host).is_global
+    return ('AxionPanel will be provisioned on this fresh host:\n'
+            '  Listen: %s\n  Origin: https://%s%s\n  Administrator: %s\n'
+            '  Firewall: %s\n'
+            '  Native HTTPS, self-signed certificate; agent stays on a Unix socket.\n'
+            '  Creates service account, binaries, private state and systemd units.\n'
+            '  Starts and enables only the new AxionPanel services after readiness.\n'
+            '  Failure preserves partial state for manual reconciliation.\n'
+            '%s'
+            % (_ap_hostport(args.host, args.port), _ap_authority(args),
+               ' (LOCAL address)' if local else '', args.admin, _ap_firewall_plan(args),
+               '  LOCAL address: external reachability is not guaranteed; provider routing and firewall rules still apply.\n'
+               if local else '  External reachability is not guaranteed; provider routing and firewall rules still apply.\n'))
+
+
+def _ap_confirm(args):
+    """Read consent only from the controlling terminal, never installer stdin."""
+    reader, writer = _ap_open_tty()
+    with ap_contextlib.ExitStack() as streams:
+        streams.callback(reader.close)
+        streams.callback(writer.close)
+        writer.write('\n' + _ap_plan(args) + 'Type INSTALL to continue: ')
+        writer.flush()
+        answer = reader.readline()
+    if answer.strip() != 'INSTALL':
+        raise RuntimeError('installation not confirmed')
+    args.yes = True
+
+
 def validate_apply(args):
     """Read-only; safe to call before any network access or provisioning."""
+    _ap_options(args)
     if not args.apply:
         return
-    _ap_options(args)
+    if not args.yes:
+        _ap_confirm(args)
+    elif not getattr(args, '_plan_shown', False):
+        print(_ap_plan(args), end='')
+    args._plan_shown = True
     try:
         _ap_fresh_checks(args)
     except (OSError, ValueError, KeyError):
@@ -156,7 +359,7 @@ def _ap_read(path, limit, uid=0, private=False):
 
 
 def _ap_check_command(path):
-    if path not in _AP_COMMANDS + (_AP_BINARY, _AP_AGENT):
+    if path not in _AP_COMMANDS + (_AP_BINARY, _AP_AGENT, _AP_UFW, '/usr/bin/python3'):
         raise RuntimeError('untrusted installer command')
     # usrmerge may use fixed system executable symlinks. Resolve only these
     # trusted names, then validate every canonical ancestor and final inode.
@@ -183,6 +386,15 @@ def _ap_check_command(path):
 
 def _ap_run(command):
     _ap_check_command(command[0])
+    if command[0] == _AP_UFW:
+        # Supported distros ship UFW as a Python script, not an ELF. Isolated
+        # mode blocks cwd/PYTHONPATH/user-site imports; no ambient interpreter.
+        _ap_check_command('/usr/bin/python3')
+        lines = _ap_read(_AP_UFW, 65536).splitlines()
+        if not lines or lines[0].split() not in (
+                [b'#!', b'/usr/bin/python3'], [b'#!/usr/bin/python3']):
+            raise RuntimeError('unsupported ufw executable; manage firewall manually')
+        command = ['/usr/bin/python3', '-I', '-B'] + list(command)
     try:
         result = ap_subprocess.run(command, stdin=ap_subprocess.DEVNULL,
             stdout=ap_subprocess.PIPE, stderr=ap_subprocess.DEVNULL,
@@ -312,6 +524,9 @@ def _ap_fresh_checks(args):
         if load != b'not-found':
             raise RuntimeError('existing AxionPanel unit in systemd')
     _ap_check_listener(args.host, args.port)
+    if args.open_firewall:
+        _ap_check_command(_AP_UFW)
+        _ap_check_firewall(args)
 
 
 @ap_contextlib.contextmanager
@@ -379,15 +594,28 @@ def _ap_mkdir(path, mode=0o755, uid=0, gid=0):
         ap_os.close(fd)
 
 
+def _ap_hostport(host, port):
+    return ('[' + host + ']' if ':' in host else host) + ':' + str(port)
+
+
 def _ap_authority(args):
-    return ('[' + args.host + ']' if ':' in args.host else args.host) + ':' + str(args.port)
+    """The same canonical address identifies bind, browser origin and certificate."""
+    return _ap_hostport(args.host, args.port)
 
 
 def _ap_serve_flags(args):
-    return ['-addr', _ap_authority(args), '-origin', 'https://' + _ap_authority(args),
+    return ['-addr', _ap_hostport(args.host, args.port), '-origin', 'https://' + _ap_authority(args),
             '-tls-cert', _AP_CERT, '-tls-key', _AP_KEY,
             '-entrance-file', _AP_STATE + '/entrance', '-db', _AP_STATE + '/panel.db',
             '-secret-key', _AP_STATE + '/secret.key', '-agent-socket', '/run/axionpanel/agent.sock']
+
+
+def _ap_rollback_units(started):
+    for unit in reversed(started):
+        try:
+            _ap_run(['/usr/bin/systemctl', '--system', 'stop', unit])
+        except Exception:
+            pass
 
 
 def _ap_units(args):
@@ -485,6 +713,7 @@ def _ap_readiness(args, uid):
     raw = _ap_read(_AP_STATE + '/bootstrap.json', 16384, uid, private=True)
     bootstrap = ap_json.loads(raw)
     origin = 'https://' + _ap_authority(args)
+    host = args.host
     if (not isinstance(bootstrap, dict) or bootstrap.get('origin') != origin or
         bootstrap.get('username') != args.admin or not isinstance(bootstrap.get('password'), str) or
         not bootstrap['password'] or not ap_re.fullmatch(r'/[A-Za-z0-9_-]{12}', bootstrap.get('entrance_path', ''))):
@@ -500,8 +729,8 @@ def _ap_readiness(args, uid):
     jar = {}
 
     def request(method, path, body=None, csrf=None):
-        connection = ap_http.HTTPSConnection(args.host, args.port, context=context, timeout=5)
-        headers = {'Origin': origin, 'User-Agent': 'AxionPanel-installer-readiness'}
+        connection = ap_http.HTTPSConnection(host, args.port, context=context, timeout=5)
+        headers = {'Origin': origin, 'Host': _ap_authority(args), 'User-Agent': 'AxionPanel-installer-readiness'}
         if jar:
             headers['Cookie'] = '; '.join(name + '=' + value for name, value in jar.items())
         if csrf is not None:
@@ -641,37 +870,50 @@ def apply_install(args, contents):
     validate_apply(args)
     if set(contents) != set(_AP_MEMBERS) or any(not isinstance(value, bytes) for value in contents.values()):
         raise RuntimeError('authenticated exact installer payload required')
-    started = []
-    mutated = False
     try:
         with _ap_lock():
-            # This is deliberately the same entire check as before authentication:
-            # a second concurrent installer must not adopt the first one's state.
-            _ap_options(args)
-            _ap_fresh_checks(args)
-            mutated = True
-            uid = _ap_provision(args, contents)
-            _ap_run(['/usr/bin/systemctl', '--system', 'daemon-reload'])
-            for unit in _AP_UNITS:
-                # A start can time out after activating the unit. Record intent
-                # before the command so cleanup includes this ambiguous outcome.
-                started.append(unit)
-                _ap_run(['/usr/bin/systemctl', '--system', 'start', unit])
-                _ap_run(['/usr/bin/systemctl', '--system', 'is-active', '--quiet', unit])
-            fingerprint = _ap_readiness(args, uid)
-            _ap_run(['/usr/bin/systemctl', '--system', 'enable', *_AP_UNITS])
-            print('Origin: https://' + _ap_authority(args))
-            print('Certificate SHA-256: ' + fingerprint)
-            print('Bootstrap file: /var/lib/axionpanel/bootstrap.json')
-            return {'origin': 'https://' + _ap_authority(args), 'certificate_sha256': fingerprint,
-                    'bootstrap_file': _AP_STATE + '/bootstrap.json', 'authenticated_agent_ready': True}
-    except (Exception, KeyboardInterrupt):
-        for unit in reversed(started):
+            started = []
+            mutated = False
             try:
-                _ap_run(['/usr/bin/systemctl', '--system', 'stop', unit])
-            except Exception:
-                pass
-        if mutated:
-            raise RuntimeError('installation failed; only newly started units were requested to stop; partial data preserved; manual reconciliation required') from None
+                # This is deliberately the same entire check as before authentication:
+                # a second concurrent installer must not adopt the first one's state.
+                _ap_options(args)
+                _ap_fresh_checks(args)
+                mutated = True
+                uid = _ap_provision(args, contents)
+                _ap_run(['/usr/bin/systemctl', '--system', 'daemon-reload'])
+                for unit in _AP_UNITS:
+                    # A start can time out after activating the unit. Record intent
+                    # before the command so cleanup includes this ambiguous outcome.
+                    started.append(unit)
+                    _ap_run(['/usr/bin/systemctl', '--system', 'start', unit])
+                    _ap_run(['/usr/bin/systemctl', '--system', 'is-active', '--quiet', unit])
+                fingerprint = _ap_readiness(args, uid)
+                if args.open_firewall:
+                    # The port is published only after the panel answered locally;
+                    # a later failure still removes the rule we asked for.
+                    _ap_open_firewall(args)
+                _ap_run(['/usr/bin/systemctl', '--system', 'enable', *_AP_UNITS])
+                print('Firewall: ' + _ap_firewall_plan(args))
+                print('Origin: https://' + _ap_authority(args) +
+                      (' (LOCAL address; external reachability is not guaranteed)'
+                       if not _ap_canonical_address(args.host).is_global else ''))
+                print('Certificate SHA-256: ' + fingerprint)
+                print('Bootstrap file: /var/lib/axionpanel/bootstrap.json')
+                return {'origin': 'https://' + _ap_authority(args), 'certificate_sha256': fingerprint,
+                        'bootstrap_file': _AP_STATE + '/bootstrap.json', 'authenticated_agent_ready': True}
+            except (Exception, KeyboardInterrupt):
+                # Rollback and service cleanup must finish before unlocking.
+                firewall_removed = getattr(args, '_firewall_rule', None) is not None
+                if mutated and not _ap_rollback_firewall(args):
+                    _ap_rollback_units(started)
+                    raise RuntimeError('installation failed; firewall rule %s was not removed; manual reconciliation required; owned comment: %s' % (
+                        getattr(args, '_firewall_rule', None), getattr(args, '_firewall_comment', None))) from None
+                _ap_rollback_units(started)
+                if mutated:
+                    suffix = '; firewall rule %d/tcp removed' % args.port if firewall_removed else ''
+                    raise RuntimeError('installation failed; only newly started units were requested to stop; partial data preserved; manual reconciliation required' + suffix) from None
+                raise RuntimeError('installation refused before provisioning; prerequisites or lock failed') from None
+    except OSError:
         raise RuntimeError('installation refused before provisioning; prerequisites or lock failed') from None
 # END AXIONPANEL APPLY ENGINE
